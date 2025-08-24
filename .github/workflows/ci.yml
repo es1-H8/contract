@@ -50,11 +50,21 @@ jobs:
         run: npm install -g solhint
 
       - name: Run Solhint linting
-        run: npx solhint "contracts/**/*.sol" | tee security-report.txt
+        run: |
+          echo "=== SOLHINT SECURITY ANALYSIS ===" | tee security-report.txt
+          echo "Tool: Solhint" | tee -a security-report.txt
+          echo "Timestamp: $(date)" | tee -a security-report.txt
+          echo "" | tee -a security-report.txt
+          npx solhint "contracts/**/*.sol" --formatter=unix | tee -a security-report.txt
 
       - name: Install Slither
         run: |
           pip install slither-analyzer
+          echo "" | tee -a security-report.txt
+          echo "=== SLITHER SECURITY ANALYSIS ===" | tee -a security-report.txt
+          echo "Tool: Slither" | tee -a security-report.txt
+          echo "Timestamp: $(date)" | tee -a security-report.txt
+          echo "" | tee -a security-report.txt
           slither . --print human-summary | tee -a security-report.txt
 
       - name: Upload full security report

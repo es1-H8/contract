@@ -62,4 +62,85 @@ contract Counter {
     function getContractBalance() public view returns (uint256) {
         return address(this).balance;
     }
+
+    // ADDITIONAL VULNERABILITIES TO ENSURE >10 WARNINGS
+    
+    // VULNERABILITY: Unchecked external call
+    function unsafeExternalCall(address target) public {
+        target.call(""); // Missing success check
+    }
+    
+    // VULNERABILITY: Block timestamp dependency
+    function timeBasedFunction() public view returns (bool) {
+        return block.timestamp > 1000000000; // Relies on block timestamp
+    }
+    
+    // VULNERABILITY: Block number dependency
+    function blockNumberFunction() public view returns (bool) {
+        return block.number % 10 == 0; // Relies on block number
+    }
+    
+    // VULNERABILITY: tx.origin usage
+    function checkOrigin() public view returns (bool) {
+        return tx.origin == msg.sender; // Dangerous tx.origin usage
+    }
+    
+    // VULNERABILITY: Low level call without proper checks
+    function lowLevelCall(address target) public {
+        assembly {
+            let result := call(gas(), target, 0, 0, 0, 0, 0)
+        }
+    }
+    
+    // VULNERABILITY: Unchecked math operations
+    function uncheckedMath(uint256 a, uint256 b) public pure returns (uint256) {
+        uint256 c = a + b; // No overflow check
+        return c;
+    }
+    
+    // VULNERABILITY: Uninitialized storage pointer
+    function uninitializedStorage() public {
+        uint256[] storage arr; // Uninitialized storage pointer
+        arr.push(1);
+    }
+    
+    // VULNERABILITY: Function visibility not specified
+    function noVisibility() {
+        // Function without visibility modifier
+    }
+    
+    // VULNERABILITY: State variable visibility not specified
+    uint256 noVisibilityVar;
+    
+    // VULNERABILITY: Function parameter name not specified
+    function noParamName(uint256) public pure returns (uint256) {
+        return 1;
+    }
+    
+    // VULNERABILITY: Event parameter name not specified
+    event NoParamName(uint256);
+    
+    // VULNERABILITY: Contract name doesn't match filename
+    // This will trigger naming convention warnings
+    
+    // VULNERABILITY: Missing NatSpec documentation
+    function noNatSpec() public {
+        // Function without proper documentation
+    }
+    
+    // VULNERABILITY: Complex fallback function
+    fallback() external {
+        // Complex fallback function
+        if (msg.sender == address(0)) {
+            revert();
+        }
+    }
+    
+    // VULNERABILITY: Receive function with logic
+    receive() external payable {
+        // Receive function with complex logic
+        if (msg.value > 0) {
+            balances[msg.sender] += msg.value;
+        }
+    }
 }
