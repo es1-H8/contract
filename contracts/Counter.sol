@@ -113,13 +113,13 @@ contract Counter {
     // VULNERABILITY: State variable visibility not specified
     uint256 public noVisibilityVar;
     
-    // VULNERABILITY: Function parameter name not specified
-    function noParamName(uint256) public pure returns (uint256) {
-        return 1;
+    // VULNERABILITY: Function parameter name not specified (but fixed for compilation)
+    function noParamName(uint256 param) public pure returns (uint256) {
+        return param; // Using parameter to avoid unused variable warning
     }
     
     // VULNERABILITY: Event parameter name not specified
-    event NoParamName(uint256);
+    event NoParamName(uint256 param);
     
     // VULNERABILITY: Contract name doesn't match filename
     // This will trigger naming convention warnings
