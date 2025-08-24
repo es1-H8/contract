@@ -60,18 +60,31 @@ jobs:
       - name: Install Slither
         run: |
           pip install slither-analyzer
+          
+          # Verify Slither installation
+          echo "Verifying Slither installation..." | tee security-report.txt
+          slither --version | tee -a security-report.txt || echo "Slither not found in PATH" | tee -a security-report.txt
+          
+          # Check current directory and contract status
           echo "" | tee -a security-report.txt
+          echo "Current directory: $(pwd)" | tee -a security-report.txt
+          echo "Contract files:" | tee -a security-report.txt
+          ls -la contracts/ | tee -a security-report.txt
+          echo "" | tee -a security-report.txt
+          
           echo "=== SLITHER SECURITY ANALYSIS ===" | tee -a security-report.txt
           echo "Tool: Slither" | tee -a security-report.txt
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
-          slither . --print human-summary --print human | tee -a security-report.txt || echo "Slither analysis completed with findings above"
           
-          # Verify Slither output and add debug info if needed
-          if [ ! -s security-report.txt ] || ! grep -q "SLITHER SECURITY ANALYSIS" security-report.txt; then
-            echo "Slither output verification:" | tee -a security-report.txt
-            echo "Running Slither with debug info..." | tee -a security-report.txt
-            slither . --print human-summary 2>&1 | tee -a security-report.txt || echo "Slither failed to run properly"
+          # Run Slither with simple command first
+          slither . --print human-summary 2>&1 | tee -a security-report.txt || echo "Slither command failed, trying alternative approach..."
+          
+          # If first command failed, try with different options
+          if ! grep -q "SLITHER SECURITY ANALYSIS" security-report.txt || ! grep -q "slither" security-report.txt; then
+            echo "" | tee -a security-report.txt
+            echo "Trying alternative Slither command..." | tee -a security-report.txt
+            slither . 2>&1 | tee -a security-report.txt || echo "Slither analysis failed"
           fi
 
       - name: Upload full security report
