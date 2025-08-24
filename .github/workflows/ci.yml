@@ -62,7 +62,7 @@ jobs:
           pip install slither-analyzer
           
           # Verify Slither installation
-          echo "Verifying Slither installation..." | tee security-report.txt
+          echo "Verifying Slither installation..." | tee -a security-report.txt
           slither --version | tee -a security-report.txt || echo "Slither not found in PATH" | tee -a security-report.txt
           
           # Check current directory and contract status
