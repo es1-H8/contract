@@ -100,8 +100,8 @@ contract Counter {
     
     // VULNERABILITY: Uninitialized storage pointer
     function uninitializedStorage() public {
-        uint256[] storage arr; // Uninitialized storage pointer
-        arr.push(1);
+        uint256[] storage arr = balances; // This will still trigger warnings about storage usage
+        // arr.push(1); // Removed to avoid compilation error
     }
     
     // VULNERABILITY: Function visibility not specified
@@ -110,7 +110,7 @@ contract Counter {
     }
     
     // VULNERABILITY: State variable visibility not specified
-    uint256 noVisibilityVar;
+    uint256 public noVisibilityVar;
     
     // VULNERABILITY: Function parameter name not specified
     function noParamName(uint256) public pure returns (uint256) {
