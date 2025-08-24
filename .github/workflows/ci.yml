@@ -50,12 +50,18 @@ jobs:
         run: npm install -g solhint
 
       - name: Run Solhint linting
-        run: npx solhint "contracts/**/*.sol"
+        run: npx solhint "contracts/**/*.sol" | tee security-report.txt
 
       - name: Install Slither
         run: |
           pip install slither-analyzer
-          slither . --print human-summary
+          slither . --print human-summary | tee -a security-report.txt
+
+      - name: Upload full security report
+        uses: actions/upload-artifact@v3
+        with:
+          name: security-report
+          path: security-report.txt
 
   deploy:
     runs-on: ubuntu-latest
