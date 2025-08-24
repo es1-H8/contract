@@ -1,0 +1,89 @@
+name: Smart Contract CI/CD
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Compile contracts
+        run: npx hardhat compile
+
+      - name: Run Hardhat Tests
+        run: npx hardhat test
+
+  security:
+    runs-on: ubuntu-latest
+    needs: [build]
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Install Solhint
+        run: npm install -g solhint
+
+      - name: Run Solhint linting
+        run: npx solhint "contracts/**/*.sol"
+
+      - name: Install Slither
+        run: |
+          pip install slither-analyzer
+          slither . --print human-summary
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: [build, security]
+    if: github.ref == 'refs/heads/main'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Install Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: 20
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Deploy to Sepolia Testnet
+        env:
+          INFURA_API_KEY: ${{ secrets.INFURA_API_KEY }}
+          PRIVATE_KEY: ${{ secrets.PRIVATE_KEY }}
+        run: npx hardhat run scripts/deploy.js --network sepolia
+
+      - name: Verify Contract on Etherscan
+        env:
+          ETHERSCAN_API_KEY: ${{ secrets.ETHERSCAN_API_KEY }}
+        run: |
+          # This will be updated with the actual deployed contract address
+          echo "Contract verification step - update with actual address"
+          # npx hardhat verify --network sepolia DEPLOYED_CONTRACT_ADDRESS 
