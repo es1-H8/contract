@@ -67,7 +67,8 @@ contract Counter {
     
     // VULNERABILITY: Unchecked external call
     function unsafeExternalCall(address target) public {
-        target.call(""); // Missing success check
+        (bool success,) = target.call(""); // Missing success check
+        // success variable is unused - will trigger warning
     }
     
     // VULNERABILITY: Block timestamp dependency
@@ -98,10 +99,10 @@ contract Counter {
         return c;
     }
     
-    // VULNERABILITY: Uninitialized storage pointer
+    // VULNERABILITY: Unchecked external call return value
     function uninitializedStorage() public {
-        uint256[] storage arr = balances; // This will still trigger warnings about storage usage
-        // arr.push(1); // Removed to avoid compilation error
+        // This will trigger warnings about unchecked external calls
+        address(0).call(""); // Call to zero address without success check
     }
     
     // VULNERABILITY: Function visibility not specified
