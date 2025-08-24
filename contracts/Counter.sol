@@ -105,7 +105,7 @@ contract Counter {
     }
     
     // VULNERABILITY: Function visibility not specified
-    function noVisibility() {
+    function noVisibility() public {
         // Function without visibility modifier
     }
     
