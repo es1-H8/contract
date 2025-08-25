@@ -72,7 +72,7 @@ jobs:
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
           
-          # Run Slither raw output
+          # Run Slither and save raw output
           slither . 2>&1 | tee raw-slither.txt || echo "Slither failed" | tee -a security-report.txt
           
           echo "" | tee -a security-report.txt
@@ -80,23 +80,21 @@ jobs:
           echo "Formatted Slither Report" | tee -a security-report.txt
           echo "----------------------------------------" | tee -a security-report.txt
           
-          # Format: separate by contract name + add blank lines
+          # Group findings by contract
           awk '
-            /INFO:Detectors:/ {print ""; next}
+            BEGIN { contract=""; }
             /contracts\/.*\.sol/ {
-              split($0, parts, "#")
-              if (match(parts[1], /contracts\/[^:]+/)) {
-                contractFile = substr(parts[1], RSTART, RLENGTH)
-                gsub("contracts/", "", contractFile)
-                print "\n----------------------------------------"
-                print "Contract: " contractFile
-                print "----------------------------------------"
+              match($0, /contracts\/[^:]+\.sol/)
+              if (RLENGTH > 0) {
+                thisContract = substr($0, RSTART+10, RLENGTH-10) # strip "contracts/"
+                if (thisContract != contract) {
+                  contract=thisContract
+                  print "\n========================================"
+                  print "Contract: " contract
+                  print "========================================"
+                }
               }
-              print $0
-              next
             }
-            /^INFO:Slither/ {next}
-            /^INFO:/ {next}
             {print}
           ' raw-slither.txt | tee -a security-report.txt
 
