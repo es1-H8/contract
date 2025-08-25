@@ -123,22 +123,7 @@ EOF
           echo "----------------------------------------" | tee -a security-report.txt
           
           # Group findings by contract
-          awk '
-            BEGIN { contract=""; }
-            /contracts\/.*\.sol/ {
-              match($0, /contracts\/[^:]+\.sol/)
-              if (RLENGTH > 0) {
-                thisContract = substr($0, RSTART+10, RLENGTH-10) # strip "contracts/"
-                if (thisContract != contract) {
-                  contract=thisContract
-                  print "\n========================================"
-                  print "Contract: " contract
-                  print "========================================"
-                }
-              }
-            }
-            {print}
-          ' raw-slither.txt | tee -a security-report.txt
+          awk 'BEGIN { contract=""; } /contracts\/.*\.sol/ { match($0, /contracts\/[^:]+\.sol/); if (RLENGTH > 0) { thisContract = substr($0, RSTART+10, RLENGTH-10); if (thisContract != contract) { contract=thisContract; print "\n========================================"; print "Contract: " contract; print "========================================"; } } } {print}' raw-slither.txt | tee -a security-report.txt
 
       - name: Upload full security report
         uses: actions/upload-artifact@v4
