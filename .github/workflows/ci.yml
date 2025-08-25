@@ -91,15 +91,13 @@ jobs:
           # Ensure remappings.txt exists for Slither to understand imports
           if [ ! -f remappings.txt ]; then
             echo "Creating remappings.txt for Slither..."
-            cat > remappings.txt << 'EOF'
-@openzeppelin/=node_modules/@openzeppelin/
-@chainlink/=node_modules/@chainlink/
-@pythnetwork/=node_modules/@pythnetwork/
-erc721a/=node_modules/erc721a/
-@uniswap/=node_modules/@uniswap/
-zeppelin-solidity/=node_modules/zeppelin-solidity/
-openzeppelin-solidity/=node_modules/openzeppelin-solidity/
-EOF
+            echo "@openzeppelin/=node_modules/@openzeppelin/" > remappings.txt
+            echo "@chainlink/=node_modules/@chainlink/" >> remappings.txt
+            echo "@pythnetwork/=node_modules/@pythnetwork/" >> remappings.txt
+            echo "erc721a/=node_modules/erc721a/" >> remappings.txt
+            echo "@uniswap/=node_modules/@uniswap/" >> remappings.txt
+            echo "zeppelin-solidity/=node_modules/zeppelin-solidity/" >> remappings.txt
+            echo "openzeppelin-solidity/=node_modules/openzeppelin-solidity/" >> remappings.txt
           fi
           
           # Process each contract individually to ensure complete Slither analysis
