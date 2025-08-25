@@ -56,7 +56,6 @@ jobs:
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
           
-          # Get list of all contracts for analysis
           echo "Analyzing contracts:" | tee -a security-report.txt
           ls -la contracts/*.sol | tee -a security-report.txt
           echo "" | tee -a security-report.txt
@@ -64,65 +63,42 @@ jobs:
           npx solhint "contracts/**/*.sol" --formatter=unix | tee -a security-report.txt
 
       - name: Install Slither
+        run: pip install slither-analyzer
+
+      - name: Run Slither analysis
         run: |
-          pip install slither-analyzer
-          
-          # Verify Slither installation
-          echo "Verifying Slither installation..." | tee -a security-report.txt
-          slither --version | tee -a security-report.txt || echo "Slither not found in PATH" | tee -a security-report.txt
-          
-          # Check current directory and contract status
-          echo "" | tee -a security-report.txt
-          echo "Current directory: $(pwd)" | tee -a security-report.txt
-          echo "Contract files discovered:" | tee -a security-report.txt
-          ls -la contracts/*.sol | tee -a security-report.txt
-          echo "" | tee -a security-report.txt
-          echo "Total contracts to analyze: $(ls contracts/*.sol | wc -l)" | tee -a security-report.txt
-          echo "" | tee -a security-report.txt
-          
           echo "=== SLITHER SECURITY ANALYSIS ===" | tee -a security-report.txt
           echo "Tool: Slither" | tee -a security-report.txt
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
           
-          # Run Slither with simple formatting approach
-          echo "Running Slither analysis..." | tee -a security-report.txt
+          # Run Slither raw output
+          slither . 2>&1 | tee raw-slither.txt || echo "Slither failed" | tee -a security-report.txt
           
-          # List contracts being analyzed
-          echo "Contracts analyzed:" | tee -a security-report.txt
-          for contract in contracts/*.sol; do
-            if [ -f "$contract" ]; then
-              contract_name=$(basename "$contract" .sol)
-              echo "  - $contract_name" | tee -a security-report.txt
-            fi
-          done
           echo "" | tee -a security-report.txt
-          
-          # Run Slither and format output directly
-          echo "Vulnerability Analysis Results:" | tee -a security-report.txt
+          echo "----------------------------------------" | tee -a security-report.txt
+          echo "Formatted Slither Report" | tee -a security-report.txt
           echo "----------------------------------------" | tee -a security-report.txt
           
-          # Run Slither and format the output in real-time
-          slither . --print human-summary 2>&1 | while IFS= read -r line; do
-            # Add contract separators for better readability
-            if echo "$line" | grep -qE "^[A-Za-z][A-Za-z0-9_]*:"; then
-              echo "" | tee -a security-report.txt
-              echo "----------------------------------------" | tee -a security-report.txt
-              echo "Contract: $(echo "$line" | sed 's/:.*$//')" | tee -a security-report.txt
-              echo "----------------------------------------" | tee -a security-report.txt
-              echo "$line" | tee -a security-report.txt
-            elif echo "$line" | grep -qE "^[[:space:]]*\\[[A-Za-z]+\\]"; then
-              # Vulnerability line - add spacing
-              echo "" | tee -a security-report.txt
-              echo "$line" | tee -a security-report.txt
-            elif echo "$line" | grep -qE "^[[:space:]]*->"; then
-              # Reference line - indent it
-              echo "   $line" | tee -a security-report.txt
-            else
-              # Other lines - preserve as is
-              echo "$line" | tee -a security-report.txt
-            fi
-          done || echo "Slither analysis completed or failed"
+          # Format: separate by contract name + add blank lines
+          awk '
+            /INFO:Detectors:/ {print ""; next}
+            /contracts\/.*\.sol/ {
+              split($0, parts, "#")
+              if (match(parts[1], /contracts\/[^:]+/)) {
+                contractFile = substr(parts[1], RSTART, RLENGTH)
+                gsub("contracts/", "", contractFile)
+                print "\n----------------------------------------"
+                print "Contract: " contractFile
+                print "----------------------------------------"
+              }
+              print $0
+              next
+            }
+            /^INFO:Slither/ {next}
+            /^INFO:/ {next}
+            {print}
+          ' raw-slither.txt | tee -a security-report.txt
 
       - name: Upload full security report
         uses: actions/upload-artifact@v4
@@ -150,10 +126,8 @@ jobs:
       - name: Discover contracts for deployment
         run: |
           echo "=== CONTRACTS DISCOVERED FOR DEPLOYMENT ==="
-          echo "Contracts directory contents:"
           ls -la contracts/
           echo ""
-          echo "Smart contracts found:"
           ls contracts/*.sol | sed 's/contracts\//  - /'
           echo ""
           echo "Total contracts to deploy: $(ls contracts/*.sol | wc -l)"
@@ -177,4 +151,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: deployment-summary
-          path: deployment-summary.txt 
+          path: deployment-summary.txt
