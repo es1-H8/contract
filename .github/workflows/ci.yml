@@ -91,14 +91,14 @@ jobs:
           # Create a temporary file for raw Slither output
           slither . --print human-summary 2>&1 > slither_raw.txt || echo "Slither command failed, trying alternative approach..."
           
-          # If first command failed, try with different options
-          if [ ! -s slither_raw.txt ]; then
+          # Check if the file exists and has content
+          if [ ! -f slither_raw.txt ] || [ ! -s slither_raw.txt ]; then
             echo "Trying alternative Slither command..." | tee -a security-report.txt
             slither . 2>&1 > slither_raw.txt || echo "Slither analysis failed"
           fi
           
           # Format the Slither output for better readability
-          if [ -s slither_raw.txt ]; then
+          if [ -f slither_raw.txt ] && [ -s slither_raw.txt ]; then
             echo "Formatting Slither results..." | tee -a security-report.txt
             
             # Extract contract names from the contracts directory
@@ -118,7 +118,7 @@ jobs:
             current_contract=""
             while IFS= read -r line; do
               # Check if this line indicates a new contract
-              if [[ "$line" =~ ^[A-Za-z][A-Za-z0-9_]*:$ ]] || [[ "$line" =~ ^[A-Za-z][A-Za-z0-9_]*\s*\( ]]; then
+              if echo "$line" | grep -qE "^[A-Za-z][A-Za-z0-9_]*:" || echo "$line" | grep -qE "^[A-Za-z][A-Za-z0-9_]*[[:space:]]*\\("; then
                 # Extract contract name (remove trailing colon or parentheses)
                 contract_name=$(echo "$line" | sed 's/[:()].*$//' | xargs)
                 
@@ -130,11 +130,11 @@ jobs:
                   echo "----------------------------------------" | tee -a security-report.txt
                   current_contract="$contract_name"
                 fi
-              elif [[ "$line" =~ ^[[:space:]]*\[[A-Za-z]+\] ]] || [[ "$line" =~ ^[[:space:]]*[A-Za-z]+: ]]; then
+              elif echo "$line" | grep -qE "^[[:space:]]*\\[[A-Za-z]+\\]" || echo "$line" | grep -qE "^[[:space:]]*[A-Za-z]+:"; then
                 # This is a vulnerability line - add extra spacing for readability
                 echo "" | tee -a security-report.txt
                 echo "$line" | tee -a security-report.txt
-              elif [[ "$line" =~ ^[[:space:]]*-> ]] || [[ "$line" =~ ^[[:space:]]*Reference: ]]; then
+              elif echo "$line" | grep -qE "^[[:space:]]*->" || echo "$line" | grep -qE "^[[:space:]]*Reference:"; then
                 # This is a reference or detail line - indent it
                 echo "   $line" | tee -a security-report.txt
               elif [ -n "$line" ]; then
