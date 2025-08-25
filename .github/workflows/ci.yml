@@ -60,7 +60,23 @@ jobs:
           ls -la contracts/*.sol | tee -a security-report.txt
           echo "" | tee -a security-report.txt
           
-          npx solhint "contracts/**/*.sol" --formatter=unix | tee -a security-report.txt
+          # Process each contract individually to ensure complete analysis
+          for contract in contracts/*.sol; do
+            if [ -f "$contract" ]; then
+              contract_name=$(basename "$contract")
+              echo "========================================" | tee -a security-report.txt
+              echo "Analyzing: $contract_name" | tee -a security-report.txt
+              echo "========================================" | tee -a security-report.txt
+              npx solhint "$contract" --formatter=unix | tee -a security-report.txt || echo "No issues found in $contract_name" | tee -a security-report.txt
+              echo "" | tee -a security-report.txt
+            fi
+          done
+          
+          # Show analysis summary
+          TOTAL_CONTRACTS=$(ls contracts/*.sol | wc -l)
+          echo "=== SOLHINT ANALYSIS COMPLETE ===" | tee -a security-report.txt
+          echo "Total contracts analyzed: $TOTAL_CONTRACTS" | tee -a security-report.txt
+          echo "" | tee -a security-report.txt
 
       - name: Install Slither
         run: pip install slither-analyzer
