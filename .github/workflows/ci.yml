@@ -46,6 +46,25 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      - name: Verify dependencies for import resolution
+        run: |
+          echo "=== VERIFYING DEPENDENCIES FOR IMPORT RESOLUTION ==="
+          echo "Checking if required packages are installed:"
+          echo ""
+          echo "OpenZeppelin contracts:"
+          ls -la node_modules/@openzeppelin/contracts/ | head -5
+          echo ""
+          echo "Chainlink contracts:"
+          ls -la node_modules/@chainlink/contracts/ | head -5
+          echo ""
+          echo "Pyth Network:"
+          ls -la node_modules/@pythnetwork/ | head -5
+          echo ""
+          echo "ERC721A:"
+          ls -la node_modules/erc721a/ | head -5
+          echo ""
+          echo "Dependencies verification complete"
+
       - name: Install Solhint
         run: npm install -g solhint
 
@@ -83,22 +102,26 @@ jobs:
 
       - name: Run Slither analysis
         run: |
-          echo "=== SLITHER SECURITY ANALYSIS ===" | tee security-report.txt
+          echo "=== SLITHER SECURITY ANALYSIS ===" | tee -a security-report.txt
           echo "Tool: Slither" | tee -a security-report.txt
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
           
-          # Ensure remappings.txt exists for Slither to understand imports
-          if [ ! -f remappings.txt ]; then
-            echo "Creating remappings.txt for Slither..."
-            echo "@openzeppelin/=node_modules/@openzeppelin/" > remappings.txt
-            echo "@chainlink/=node_modules/@chainlink/" >> remappings.txt
-            echo "@pythnetwork/=node_modules/@pythnetwork/" >> remappings.txt
-            echo "erc721a/=node_modules/erc721a/" >> remappings.txt
-            echo "@uniswap/=node_modules/@uniswap/" >> remappings.txt
-            echo "zeppelin-solidity/=node_modules/zeppelin-solidity/" >> remappings.txt
-            echo "openzeppelin-solidity/=node_modules/openzeppelin-solidity/" >> remappings.txt
-          fi
+          # Create remappings.txt for proper import resolution
+          echo "Creating remappings.txt for import resolution..."
+          cat > remappings.txt << 'EOF'
+@openzeppelin/=node_modules/@openzeppelin/
+@chainlink/=node_modules/@chainlink/
+@pythnetwork/=node_modules/@pythnetwork/
+erc721a/=node_modules/erc721a/
+@uniswap/=node_modules/@uniswap/
+zeppelin-solidity/=node_modules/zeppelin-solidity/
+openzeppelin-solidity/=node_modules/openzeppelin-solidity/
+EOF
+          
+          echo "Remappings created:"
+          cat remappings.txt
+          echo ""
           
           # Process each contract individually to ensure complete Slither analysis
           for contract in contracts/*.sol; do
@@ -108,8 +131,8 @@ jobs:
               echo "Contract: $contract_name" | tee -a security-report.txt
               echo "========================================" | tee -a security-report.txt
               
-              # Run Slither with remappings and proper allow-paths to find dependencies
-              slither "$contract" --allow-paths . --allow-paths node_modules 2>&1 | tee -a raw-slither.txt || echo "Analysis completed for $contract_name" | tee -a raw-slither.txt
+              # Run Slither with proper import resolution using the project directory approach
+              slither . --contracts "$contract" 2>&1 | tee -a raw-slither.txt || echo "Analysis completed for $contract_name" | tee -a raw-slither.txt
               
               echo "" | tee -a security-report.txt
             fi
@@ -145,16 +168,6 @@ jobs:
 
       - name: Install dependencies
         run: npm install
-
-      - name: Verify dependencies for Slither
-        run: |
-          echo "=== VERIFYING DEPENDENCIES FOR SLITHER ==="
-          echo "Checking if required packages are installed:"
-          ls -la node_modules/@openzeppelin/contracts/ | head -5
-          ls -la node_modules/@chainlink/contracts/ | head -5
-          ls -la node_modules/@pythnetwork/ | head -5
-          echo ""
-          echo "Dependencies verification complete"
 
       - name: Discover contracts for deployment
         run: |
