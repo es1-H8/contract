@@ -85,70 +85,44 @@ jobs:
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
           
-          # Run Slither and format the output for better readability
+          # Run Slither with simple formatting approach
           echo "Running Slither analysis..." | tee -a security-report.txt
           
-          # Create a temporary file for raw Slither output
-          slither . --print human-summary 2>&1 > slither_raw.txt || echo "Slither command failed, trying alternative approach..."
+          # List contracts being analyzed
+          echo "Contracts analyzed:" | tee -a security-report.txt
+          for contract in contracts/*.sol; do
+            if [ -f "$contract" ]; then
+              contract_name=$(basename "$contract" .sol)
+              echo "  - $contract_name" | tee -a security-report.txt
+            fi
+          done
+          echo "" | tee -a security-report.txt
           
-          # Check if the file exists and has content
-          if [ ! -f slither_raw.txt ] || [ ! -s slither_raw.txt ]; then
-            echo "Trying alternative Slither command..." | tee -a security-report.txt
-            slither . 2>&1 > slither_raw.txt || echo "Slither analysis failed"
-          fi
+          # Run Slither and format output directly
+          echo "Vulnerability Analysis Results:" | tee -a security-report.txt
+          echo "----------------------------------------" | tee -a security-report.txt
           
-          # Format the Slither output for better readability
-          if [ -f slither_raw.txt ] && [ -s slither_raw.txt ]; then
-            echo "Formatting Slither results..." | tee -a security-report.txt
-            
-            # Extract contract names from the contracts directory
-            echo "Contracts analyzed:" | tee -a security-report.txt
-            for contract in contracts/*.sol; do
-              if [ -f "$contract" ]; then
-                contract_name=$(basename "$contract" .sol)
-                echo "  - $contract_name" | tee -a security-report.txt
-              fi
-            done
-            echo "" | tee -a security-report.txt
-            
-            # Process and format the Slither output
-            echo "Processing vulnerability results..." | tee -a security-report.txt
-            
-            # Group vulnerabilities by contract and format them
-            current_contract=""
-            while IFS= read -r line; do
-              # Check if this line indicates a new contract
-              if echo "$line" | grep -qE "^[A-Za-z][A-Za-z0-9_]*:" || echo "$line" | grep -qE "^[A-Za-z][A-Za-z0-9_]*[[:space:]]*\\("; then
-                # Extract contract name (remove trailing colon or parentheses)
-                contract_name=$(echo "$line" | sed 's/[:()].*$//' | xargs)
-                
-                # If this is a new contract, add separator
-                if [ "$contract_name" != "$current_contract" ] && [ -n "$contract_name" ]; then
-                  echo "" | tee -a security-report.txt
-                  echo "----------------------------------------" | tee -a security-report.txt
-                  echo "Contract: $contract_name" | tee -a security-report.txt
-                  echo "----------------------------------------" | tee -a security-report.txt
-                  current_contract="$contract_name"
-                fi
-              elif echo "$line" | grep -qE "^[[:space:]]*\\[[A-Za-z]+\\]" || echo "$line" | grep -qE "^[[:space:]]*[A-Za-z]+:"; then
-                # This is a vulnerability line - add extra spacing for readability
-                echo "" | tee -a security-report.txt
-                echo "$line" | tee -a security-report.txt
-              elif echo "$line" | grep -qE "^[[:space:]]*->" || echo "$line" | grep -qE "^[[:space:]]*Reference:"; then
-                # This is a reference or detail line - indent it
-                echo "   $line" | tee -a security-report.txt
-              elif [ -n "$line" ]; then
-                # Other non-empty lines - preserve them
-                echo "$line" | tee -a security-report.txt
-              fi
-            done < slither_raw.txt
-            
-            # Clean up temporary file
-            rm -f slither_raw.txt
-            
-          else
-            echo "No Slither output to process" | tee -a security-report.txt
-          fi
+          # Run Slither and format the output in real-time
+          slither . --print human-summary 2>&1 | while IFS= read -r line; do
+            # Add contract separators for better readability
+            if echo "$line" | grep -qE "^[A-Za-z][A-Za-z0-9_]*:"; then
+              echo "" | tee -a security-report.txt
+              echo "----------------------------------------" | tee -a security-report.txt
+              echo "Contract: $(echo "$line" | sed 's/:.*$//')" | tee -a security-report.txt
+              echo "----------------------------------------" | tee -a security-report.txt
+              echo "$line" | tee -a security-report.txt
+            elif echo "$line" | grep -qE "^[[:space:]]*\\[[A-Za-z]+\\]"; then
+              # Vulnerability line - add spacing
+              echo "" | tee -a security-report.txt
+              echo "$line" | tee -a security-report.txt
+            elif echo "$line" | grep -qE "^[[:space:]]*->"; then
+              # Reference line - indent it
+              echo "   $line" | tee -a security-report.txt
+            else
+              # Other lines - preserve as is
+              echo "$line" | tee -a security-report.txt
+            fi
+          done || echo "Slither analysis completed or failed"
 
       - name: Upload full security report
         uses: actions/upload-artifact@v4
