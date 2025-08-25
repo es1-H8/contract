@@ -1,7 +1,7 @@
 SPDX-License-Identifier: MIT
 pragma solidity ^0.8.2;
 
-import "@openzeppelin/contracts@5.0.2/access/Ownable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 contract TokenAlgus is Ownable {
     mapping(address => uint256) public balances;
