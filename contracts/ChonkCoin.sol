@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 /// @title ChonkCoin
 /// @notice An ERC-20 token with tax, liquidity, and burn fees on transfers
