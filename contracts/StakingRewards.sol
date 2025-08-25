@@ -22,7 +22,7 @@ contract StakingRewards is Ownable {
     event Staked(address indexed user, uint256 amount);
     event RewardClaimed(address indexed user, uint256 amount);
 
-    constructor(address _stakingToken, address _rewardToken, address _priceFeed) Ownable(msg.sender) {
+    constructor(address _stakingToken, address _rewardToken, address _priceFeed) Ownable() {
         stakingToken = IERC20(_stakingToken);
         rewardToken = IERC20(_rewardToken);
         priceFeed = AggregatorV3Interface(_priceFeed);

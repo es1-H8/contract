@@ -25,7 +25,7 @@ contract ITManToken is
 	function initialize(address initialOwner) public initializer {
 		__ERC20_init("ITManToken", "ITM");
 		__ERC20Pausable_init();
-		__Ownable_init(initialOwner);
+		           __Ownable_init();
 		__ERC20Permit_init("ITManToken");
 		__UUPSUpgradeable_init();
 		_mint(msg.sender, 1000000 * 10 ** decimals());
@@ -55,7 +55,15 @@ contract ITManToken is
 		address from,
 		address to,
 		uint256 value
+	    ) internal {
+        super._transfer(from, to, value);
+    }
+
+	function _beforeTokenTransfer(
+		address from,
+		address to,
+		uint256 amount
 	) internal override(ERC20Upgradeable, ERC20PausableUpgradeable) {
-		super._update(from, to, value);
+		super._beforeTokenTransfer(from, to, amount);
 	}
 }

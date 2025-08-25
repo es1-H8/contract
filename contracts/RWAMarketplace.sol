@@ -2,7 +2,16 @@
 pragma solidity ^0.8.20;
 
 import "@chainlink/contracts/src/v0.8/vrf/VRFConsumerBaseV2.sol";
-import "@chainlink/contracts/src/v0.8/vrf/interfaces/VRFCoordinatorV2Interface.sol";
+// Local interface for VRF Coordinator
+interface VRFCoordinatorV2Interface {
+    function requestRandomWords(
+        bytes32 keyHash,
+        uint64 subId,
+        uint16 requestConfirmations,
+        uint32 callbackGasLimit,
+        uint32 numWords
+    ) external returns (uint256 requestId);
+}
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 
@@ -38,7 +47,7 @@ contract RWAMarketplace is VRFConsumerBaseV2, Ownable {
 
     constructor(address _paymentToken, uint64 _subscriptionId, address _vrfCoordinator, bytes32 _keyHash) 
         VRFConsumerBaseV2(_vrfCoordinator) 
-        Ownable(msg.sender) 
+        Ownable() 
     {
         COORDINATOR = VRFCoordinatorV2Interface(_vrfCoordinator);
         paymentToken = IERC20(_paymentToken);

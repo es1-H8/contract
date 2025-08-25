@@ -353,8 +353,7 @@ contract MetaNodeStake is
         if (_to > endBlock) {_to = endBlock;}
         require(_from <= _to, "end block must be greater than start block");
         bool success;
-        (success, multiplier) = (_to - _from).tryMul(MetaNodePerBlock);
-        require(success, "multiplier overflow");
+        multiplier = (_to - _from) * MetaNodePerBlock;
     }
 
     /**
@@ -415,23 +414,14 @@ contract MetaNodeStake is
             return;
         }
 
-        (bool success1, uint256 totalMetaNode) = getMultiplier(pool_.lastRewardBlock, block.number).tryMul(pool_.poolWeight);
-        require(success1, "overflow");
-
-        (success1, totalMetaNode) = totalMetaNode.tryDiv(totalPoolWeight);
-        require(success1, "overflow");
+        uint256 totalMetaNode = getMultiplier(pool_.lastRewardBlock, block.number) * pool_.poolWeight;
+        totalMetaNode = totalMetaNode / totalPoolWeight;
 
         uint256 stSupply = pool_.stTokenAmount;
         if (stSupply > 0) {
-            (bool success2, uint256 totalMetaNode_) = totalMetaNode.tryMul(1 ether);
-            require(success2, "overflow");
-
-            (success2, totalMetaNode_) = totalMetaNode_.tryDiv(stSupply);
-            require(success2, "overflow");
-
-            (bool success3, uint256 accMetaNodePerST) = pool_.accMetaNodePerST.tryAdd(totalMetaNode_);
-            require(success3, "overflow");
-            pool_.accMetaNodePerST = accMetaNodePerST;
+            uint256 totalMetaNode_ = totalMetaNode * (1 ether);
+            totalMetaNode_ = totalMetaNode_ / stSupply;
+            pool_.accMetaNodePerST = pool_.accMetaNodePerST + totalMetaNode_;
         }
 
         pool_.lastRewardBlock = block.number;
@@ -591,40 +581,21 @@ contract MetaNodeStake is
         updatePool(_pid);
 
         if (user_.stAmount > 0) {
-            // uint256 accST = user_.stAmount.mulDiv(pool_.accMetaNodePerST, 1 ether);
-            (bool success1, uint256 accST) = user_.stAmount.tryMul(pool_.accMetaNodePerST);
-            require(success1, "user stAmount mul accMetaNodePerST overflow");
-            (success1, accST) = accST.tryDiv(1 ether);
-            require(success1, "accST div 1 ether overflow");
-            
-            (bool success2, uint256 pendingMetaNode_) = accST.trySub(user_.finishedMetaNode);
-            require(success2, "accST sub finishedMetaNode overflow");
+            uint256 accST = user_.stAmount * pool_.accMetaNodePerST / (1 ether);
+            uint256 pendingMetaNode_ = accST - user_.finishedMetaNode;
 
             if(pendingMetaNode_ > 0) {
-                (bool success3, uint256 _pendingMetaNode) = user_.pendingMetaNode.tryAdd(pendingMetaNode_);
-                require(success3, "user pendingMetaNode overflow");
-                user_.pendingMetaNode = _pendingMetaNode;
+                user_.pendingMetaNode = user_.pendingMetaNode + pendingMetaNode_;
             }
         }
 
         if(_amount > 0) {
-            (bool success4, uint256 stAmount) = user_.stAmount.tryAdd(_amount);
-            require(success4, "user stAmount overflow");
-            user_.stAmount = stAmount;
+            user_.stAmount = user_.stAmount + _amount;
         }
 
-        (bool success5, uint256 stTokenAmount) = pool_.stTokenAmount.tryAdd(_amount);
-        require(success5, "pool stTokenAmount overflow");
-        pool_.stTokenAmount = stTokenAmount;
+        pool_.stTokenAmount = pool_.stTokenAmount + _amount;
 
-        // user_.finishedMetaNode = user_.stAmount.mulDiv(pool_.accMetaNodePerST, 1 ether);
-        (bool success6, uint256 finishedMetaNode) = user_.stAmount.tryMul(pool_.accMetaNodePerST);
-        require(success6, "user stAmount mul accMetaNodePerST overflow");
-
-        (success6, finishedMetaNode) = finishedMetaNode.tryDiv(1 ether);
-        require(success6, "finishedMetaNode div 1 ether overflow");
-
-        user_.finishedMetaNode = finishedMetaNode;
+        user_.finishedMetaNode = user_.stAmount * pool_.accMetaNodePerST / (1 ether);
 
         emit Deposit(msg.sender, _pid, _amount);
     }

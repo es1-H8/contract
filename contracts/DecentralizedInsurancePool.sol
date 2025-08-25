@@ -30,7 +30,7 @@ contract DecentralizedInsurancePool is Ownable {
     event PolicyPurchased(address indexed insured, uint256 policyId, uint256 premium, uint256 coverage);
     event ClaimProcessed(address indexed insured, uint256 policyId, uint256 payout);
 
-    constructor(address _priceFeed, address _premiumToken) Ownable(msg.sender) {
+    constructor(address _priceFeed, address _premiumToken) Ownable() {
         priceFeed = AggregatorV3Interface(_priceFeed);
         premiumToken = IERC20(_premiumToken);
     }

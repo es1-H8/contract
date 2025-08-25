@@ -1,4 +1,4 @@
-SPDX-License-Identifier: MIT
+// SPDX-License-Identifier: MIT
 pragma solidity ^0.8.2;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
@@ -21,7 +21,7 @@ contract TokenAlgus is Ownable {
     event Burn(address indexed from, uint256 value);
     event FeeTransfer(address indexed from, address indexed to, uint256 value);
 
-    constructor(address initialOwner) Ownable(initialOwner) {
+    constructor(address initialOwner) Ownable() {
         balances[initialOwner] = totalSupply;
         burnAddress = address(0);
         feeAddress = address(0);

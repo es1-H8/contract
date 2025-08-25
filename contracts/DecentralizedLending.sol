@@ -13,7 +13,7 @@ contract DecentralizedLending is Ownable {
     uint256 public interestRate = 5; // 5% annual interest
     uint256 public loanDuration = 365 days;
 
-    constructor(address _priceFeed) Ownable(msg.sender) {
+    constructor(address _priceFeed) Ownable() {
         priceFeed = AggregatorV3Interface(_priceFeed);
     }
 

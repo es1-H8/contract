@@ -41,7 +41,7 @@ contract nftContract is ERC721, ERC721URIStorage, Ownable {
 
     uint256 public maxSupply;
     
-    constructor() ERC721("nftContract", "NFTC") Ownable(msg.sender) {
+    constructor() ERC721("nftContract", "NFTC") Ownable() {
         maxSupply = 100;
     }
 
@@ -375,5 +375,9 @@ contract nftContract is ERC721, ERC721URIStorage, Ownable {
 
     function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721URIStorage) returns (bool) {
         return super.supportsInterface(interfaceId);
+    }
+
+    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
+        super._burn(tokenId);
     }
 }

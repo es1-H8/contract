@@ -81,7 +81,7 @@ contract UpgradeableFractionalNFTContract is
     function initialize(address _HASHATOKEN) public initializer {
         __ERC20_init("Fractional NFT Token", "FNT");
         __ERC20Permit_init("Fractional NFT Token");
-        __Ownable_init(msg.sender);
+        __Ownable_init();
         __AccessControl_init();
         __Pausable_init();
         __ReentrancyGuard_init();

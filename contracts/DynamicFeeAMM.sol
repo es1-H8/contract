@@ -23,7 +23,7 @@ contract DynamicFeeAMM is Ownable {
     event Swap(address indexed user, uint256 amount0In, uint256 amount1Out);
     event LiquidityAdded(address indexed provider, uint256 amount0, uint256 amount1);
 
-    constructor(address _token0, address _token1, address _volatilityFeed) Ownable(msg.sender) {
+    constructor(address _token0, address _token1, address _volatilityFeed) Ownable() {
         token0 = IERC20(_token0);
         token1 = IERC20(_token1);
         volatilityFeed = AggregatorV3Interface(_volatilityFeed);

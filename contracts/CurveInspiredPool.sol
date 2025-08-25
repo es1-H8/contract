@@ -20,7 +20,7 @@ contract CurveInspiredPool is Ownable {
     event Swap(address indexed user, uint256 tokenInIndex, uint256 tokenOutIndex, uint256 amountIn, uint256 amountOut);
     event LiquidityAdded(address indexed provider, uint256[] amounts, uint256 liquidityMinted);
 
-    constructor(address[] memory _tokens, address[] memory _priceFeeds) Ownable(msg.sender) {
+    constructor(address[] memory _tokens, address[] memory _priceFeeds) Ownable() {
         require(_tokens.length == _priceFeeds.length, "Mismatched arrays");
         for (uint256 i = 0; i < _tokens.length; i++) {
             require(_tokens[i] != address(0), "Invalid token");

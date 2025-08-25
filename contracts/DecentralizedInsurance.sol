@@ -13,7 +13,7 @@ contract DecentralizedInsurance is Ownable {
     uint256 public premiumRate = 1 ether; // Premium in USD
     uint256 public claimThreshold; // Asset price threshold for claim eligibility
 
-    constructor(address _priceFeed) Ownable(msg.sender) {
+    constructor(address _priceFeed) Ownable() {
         priceFeed = AggregatorV3Interface(_priceFeed); // e.g., ETH/USD feed
     }
 

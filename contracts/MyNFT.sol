@@ -8,7 +8,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 contract MyNFT is ERC721, ERC721URIStorage, Ownable {
     uint256 private _nextTokenId;
 
-    constructor() ERC721("MyNFT", "MYN") Ownable(msg.sender) {}
+    constructor() ERC721("MyNFT", "MYN") Ownable() {}
 
     function safeMint(address to, string memory uri) public onlyOwner {
         uint256 tokenId = _nextTokenId++;
@@ -27,5 +27,9 @@ contract MyNFT is ERC721, ERC721URIStorage, Ownable {
         bytes4 interfaceId
     ) public view override(ERC721, ERC721URIStorage) returns (bool) {
         return super.supportsInterface(interfaceId);
+    }
+
+    function _burn(uint256 tokenId) internal override(ERC721, ERC721URIStorage) {
+        super._burn(tokenId);
     }
 }

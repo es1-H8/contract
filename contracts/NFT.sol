@@ -1,4 +1,4 @@
-pragma solidity 0.5.0;
+pragma solidity ^0.5.5;
 
 // Use these imports for local npm installation (openzeppelin-solidity@2.3.0)
 import "openzeppelin-solidity/contracts/token/ERC721/ERC721.sol";

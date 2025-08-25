@@ -28,7 +28,7 @@ contract NFTLendingPool is Ownable {
     event LoanTaken(address indexed borrower, uint256 loanId, uint256 tokenId, uint256 amount);
     event LoanRepaid(address indexed borrower, uint256 loanId, uint256 amount);
 
-    constructor(address _nft, address _lendingToken, address _priceFeed) Ownable(msg.sender) {
+    constructor(address _nft, address _lendingToken, address _priceFeed) Ownable() {
         nft = IERC721(_nft);
         lendingToken = IERC20(_lendingToken);
         priceFeed = AggregatorV3Interface(_priceFeed);

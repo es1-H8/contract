@@ -46,7 +46,7 @@ contract GovernanceStakingPool is AutomationCompatible, Ownable {
     event Voted(address indexed voter, uint256 proposalId, bool support);
     event RewardsDistributed(address indexed user, uint256 stakeId, uint256 amount);
 
-    constructor(address _stakingToken, address _rewardToken) Ownable(msg.sender) {
+    constructor(address _stakingToken, address _rewardToken) Ownable() {
         stakingToken = IERC20(_stakingToken);
         rewardToken = IERC20(_rewardToken);
         lastRewardUpdate = block.timestamp;

@@ -36,7 +36,7 @@ contract PreSaleWithVesting is Ownable {
     event Purchased(address indexed buyer, uint256 purchaseId, uint256 amount, uint256 tierId);
     event Claimed(address indexed buyer, uint256 purchaseId, uint256 amount);
 
-    constructor(address _saleToken, address _priceFeed, uint256 _saleDuration) Ownable(msg.sender) {
+    constructor(address _saleToken, address _priceFeed, uint256 _saleDuration) Ownable() {
         saleToken = IERC20(_saleToken);
         priceFeed = AggregatorV3Interface(_priceFeed);
         saleStartTime = block.timestamp;

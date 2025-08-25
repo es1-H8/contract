@@ -26,7 +26,7 @@ contract AdvancedLendingProtocol is Ownable {
     event LoanRepaid(address indexed borrower, uint256 amount, uint256 interest);
     event Liquidation(address indexed borrower, uint256 collateralSeized, uint256 debtRepaid);
 
-    constructor(address _priceFeed, address _lendingToken) Ownable(msg.sender) {
+    constructor(address _priceFeed, address _lendingToken) Ownable() {
         priceFeed = AggregatorV3Interface(_priceFeed); // e.g., ETH/USD
         lendingToken = IERC20(_lendingToken);
     }
