@@ -1,0 +1,7 @@
+@openzeppelin/=node_modules/@openzeppelin/
+@chainlink/=node_modules/@chainlink/
+@pythnetwork/=node_modules/@pythnetwork/
+erc721a/=node_modules/erc721a/
+@uniswap/=node_modules/@uniswap/
+zeppelin-solidity/=node_modules/zeppelin-solidity/
+openzeppelin-solidity/=node_modules/openzeppelin-solidity/

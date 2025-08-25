@@ -83,16 +83,37 @@ jobs:
 
       - name: Run Slither analysis
         run: |
-          echo "=== SLITHER SECURITY ANALYSIS ===" | tee -a security-report.txt
+          echo "=== SLITHER SECURITY ANALYSIS ===" | tee security-report.txt
           echo "Tool: Slither" | tee -a security-report.txt
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
+          
+          # Ensure remappings.txt exists for Slither to understand imports
+          if [ ! -f remappings.txt ]; then
+            echo "Creating remappings.txt for Slither..."
+            cat > remappings.txt << 'EOF'
+@openzeppelin/=node_modules/@openzeppelin/
+@chainlink/=node_modules/@chainlink/
+@pythnetwork/=node_modules/@pythnetwork/
+erc721a/=node_modules/erc721a/
+@uniswap/=node_modules/@uniswap/
+zeppelin-solidity/=node_modules/zeppelin-solidity/
+openzeppelin-solidity/=node_modules/openzeppelin-solidity/
+EOF
+          fi
           
           # Process each contract individually to ensure complete Slither analysis
           for contract in contracts/*.sol; do
             if [ -f "$contract" ]; then
               contract_name=$(basename "$contract")
-              slither "$contract" 2>&1 | tee -a raw-slither.txt || echo "No issues found in $contract_name" | tee -a raw-slither.txt
+              echo "========================================" | tee -a security-report.txt
+              echo "Contract: $contract_name" | tee -a security-report.txt
+              echo "========================================" | tee -a security-report.txt
+              
+              # Run Slither with remappings and proper allow-paths to find dependencies
+              slither "$contract" --allow-paths . --allow-paths node_modules 2>&1 | tee -a raw-slither.txt || echo "Analysis completed for $contract_name" | tee -a raw-slither.txt
+              
+              echo "" | tee -a security-report.txt
             fi
           done
           
@@ -141,6 +162,16 @@ jobs:
 
       - name: Install dependencies
         run: npm install
+
+      - name: Verify dependencies for Slither
+        run: |
+          echo "=== VERIFYING DEPENDENCIES FOR SLITHER ==="
+          echo "Checking if required packages are installed:"
+          ls -la node_modules/@openzeppelin/contracts/ | head -5
+          ls -la node_modules/@chainlink/contracts/ | head -5
+          ls -la node_modules/@pythnetwork/ | head -5
+          echo ""
+          echo "Dependencies verification complete"
 
       - name: Discover contracts for deployment
         run: |
