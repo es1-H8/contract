@@ -1,14 +1,9 @@
 pragma solidity 0.5.0;
 
 // Use these imports for local npm installation (openzeppelin-solidity@2.3.0)
-// import "openzeppelin-solidity/contracts/token/ERC721/ERC721.sol";
-// import "openzeppelin-solidity/contracts/token/ERC721/ERC721Metadata.sol";
-// import "openzeppelin-solidity/contracts/token/ERC721/ERC721Enumerable.sol";
-
-// Use these imports for Remix
-import "https://raw.githubusercontent.com/OpenZeppelin/openzeppelin-solidity/v2.3.0/contracts/token/ERC721/ERC721.sol";
-import "https://raw.githubusercontent.com/OpenZeppelin/openzeppelin-solidity/v2.3.0/contracts/token/ERC721/ERC721Metadata.sol";
-import "https://raw.githubusercontent.com/OpenZeppelin/openzeppelin-solidity/v2.3.0/contracts/token/ERC721/ERC721Enumerable.sol";
+import "openzeppelin-solidity/contracts/token/ERC721/ERC721.sol";
+import "openzeppelin-solidity/contracts/token/ERC721/ERC721Metadata.sol";
+import "openzeppelin-solidity/contracts/token/ERC721/ERC721Enumerable.sol";
 
 contract nftContract is ERC721, ERC721Metadata, ERC721Enumerable {
     struct nftData {
