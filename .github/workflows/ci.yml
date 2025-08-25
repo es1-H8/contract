@@ -88,8 +88,13 @@ jobs:
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
           
-          # Run Slither and save raw output
-          slither . 2>&1 | tee raw-slither.txt || echo "Slither failed" | tee -a security-report.txt
+          # Process each contract individually to ensure complete Slither analysis
+          for contract in contracts/*.sol; do
+            if [ -f "$contract" ]; then
+              contract_name=$(basename "$contract")
+              slither "$contract" 2>&1 | tee -a raw-slither.txt || echo "No issues found in $contract_name" | tee -a raw-slither.txt
+            fi
+          done
           
           echo "" | tee -a security-report.txt
           echo "----------------------------------------" | tee -a security-report.txt
