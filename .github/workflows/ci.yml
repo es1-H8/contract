@@ -146,12 +146,7 @@ jobs:
             echo "" | tee -a security-report.txt
             
             # Format the output with better spacing between contracts
-            cat raw-slither.txt | sed 's/^Contract: /\
-\
-========================================\
-Contract: /g' | sed 's/^INFO:Detectors:/\
-\
-INFO:Detectors:/g' | tee -a security-report.txt
+            cat raw-slither.txt | sed 's/^Contract: /\n\n========================================\nContract: /g' | sed 's/^INFO:Detectors:/\n\nINFO:Detectors:/g' | tee -a security-report.txt
           else
             echo "No Slither analysis output found" | tee -a security-report.txt
           fi
