@@ -145,8 +145,13 @@ jobs:
             echo "Slither analysis output:" | tee -a security-report.txt
             echo "" | tee -a security-report.txt
             
-            # Format the output with better spacing between contracts
-            cat raw-slither.txt | sed 's/^Contract: /\n\n========================================\nContract: /g' | sed 's/^INFO:Detectors:/\n\nINFO:Detectors:/g' | tee -a security-report.txt
+            # Format the output to group vulnerabilities by contract with clear separation
+            cat raw-slither.txt | sed 's/^Contract: /\n\n========================================\nContract: /g' | sed 's/^INFO:Detectors:/\n\nINFO:Detectors:/g' | sed 's/^Reference:/\nReference:/g' | sed 's/^$/========================================/' | tee -a security-report.txt
+            
+            echo "" | tee -a security-report.txt
+            echo "========================================" | tee -a security-report.txt
+            echo "END OF SLITHER ANALYSIS" | tee -a security-report.txt
+            echo "========================================" | tee -a security-report.txt
           else
             echo "No Slither analysis output found" | tee -a security-report.txt
           fi
