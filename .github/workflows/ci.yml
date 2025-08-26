@@ -121,28 +121,32 @@ jobs:
           cat remappings.txt
           echo ""
           
-          # Process each contract individually to ensure complete Slither analysis
-          for contract in contracts/*.sol; do
-            if [ -f "$contract" ]; then
-              contract_name=$(basename "$contract")
-              echo "========================================" | tee -a security-report.txt
-              echo "Contract: $contract_name" | tee -a security-report.txt
-              echo "========================================" | tee -a security-report.txt
-              
-              # Run Slither with proper import resolution using the project directory approach
-              slither . --contracts "$contract" 2>&1 | tee -a raw-slither.txt || echo "Analysis completed for $contract_name" | tee -a raw-slither.txt
-              
-              echo "" | tee -a security-report.txt
-            fi
-          done
+          # Run Slither once on the entire project for proper import resolution
+          echo "Running Slither analysis on entire project for import resolution..."
+          slither . 2>&1 | tee -a raw-slither.txt || echo "Slither analysis completed" | tee -a raw-slither.txt
+          
+          echo "" | tee -a security-report.txt
+          echo "----------------------------------------" | tee -a security-report.txt
+          echo "Slither Analysis Results" | tee -a security-report.txt
+          echo "----------------------------------------" | tee -a security-report.txt
+          
+          # Show which contracts were analyzed
+          echo "Contracts analyzed:" | tee -a security-report.txt
+          ls contracts/*.sol | sed 's/contracts\//  - /' | tee -a security-report.txt
+          echo "" | tee -a security-report.txt
           
           echo "" | tee -a security-report.txt
           echo "----------------------------------------" | tee -a security-report.txt
           echo "Formatted Slither Report" | tee -a security-report.txt
           echo "----------------------------------------" | tee -a security-report.txt
           
-          # Group findings by contract
-          awk 'BEGIN { contract=""; } /contracts\/.*\.sol/ { match($0, /contracts\/[^:]+\.sol/); if (RLENGTH > 0) { thisContract = substr($0, RSTART+10, RLENGTH-10); if (thisContract != contract) { contract=thisContract; print "\n========================================"; print "Contract: " contract; print "========================================"; } } } {print}' raw-slither.txt | tee -a security-report.txt
+          # Process and format the Slither output
+          if [ -s raw-slither.txt ]; then
+            echo "Slither analysis output:" | tee -a security-report.txt
+            cat raw-slither.txt | tee -a security-report.txt
+          else
+            echo "No Slither analysis output found" | tee -a security-report.txt
+          fi
 
       - name: Upload full security report
         uses: actions/upload-artifact@v4
