@@ -137,18 +137,50 @@ jobs:
           
           echo "" | tee -a security-report.txt
           echo "----------------------------------------" | tee -a security-report.txt
-          echo "Formatted Slither Report" | tee -a security-report.txt
+          echo "Formatted Slither Report (Grouped by Contract)" | tee -a security-report.txt
           echo "----------------------------------------" | tee -a security-report.txt
           
-          # Process and format the Slither output for better readability
           if [ -s raw-slither.txt ]; then
-            echo "Slither analysis output:" | tee -a security-report.txt
-            echo "" | tee -a security-report.txt
-            
-            # Format the output to group vulnerabilities by contract with clear separation
-            cat raw-slither.txt | sed 's/^Contract: /\n\n========================================\nContract: /g' | sed 's/^INFO:Detectors:/\n\nINFO:Detectors:/g' | sed 's/^Reference:/\nReference:/g' | sed 's/^$/========================================/' | tee -a security-report.txt
-            
-            echo "" | tee -a security-report.txt
+            # Group findings by the basename of files under contracts/, e.g., Ai.sol -> "Ai"
+            # Keeps ordering of first appearance; prints 6 blank lines between contracts.
+            awk '
+              {
+                line = $0
+                # Extract ALL occurrences of contracts/<Name>.sol in the line (some lines contain multiple)
+                while (match(line, /contracts\/([A-Za-z0-9_]+)\.sol/, m)) {
+                  name = m[1]
+                  if (!(name in seen)) { seen[name] = 1; order[++n] = name }
+                  grouped[name] = grouped[name] $0 "\n"
+                  # Continue searching the remainder of the line (after the match)
+                  line = substr(line, RSTART + RLENGTH)
+                }
+              }
+              END {
+                if (n == 0) {
+                  # Fallback if nothing matched contracts/<Name>.sol
+                  print "No per-contract matches found; showing raw Slither output.\n"
+                  exit 1
+                }
+                for (i = 1; i <= n; i++) {
+                  name = order[i]
+                  print "========================================"
+                  print "Contract: " name
+                  print "========================================"
+                  # Print that contract’s collected lines
+                  printf "%s", grouped[name]
+                  # 6 blank lines to separate contracts clearly for Excel pasting
+                  print "\n\n\n\n\n\n"
+                }
+              }
+            ' raw-slither.txt | tee -a security-report.txt || {
+              # If grouping didn’t find any matches, append raw output to keep behavior safe
+              echo "========================================" | tee -a security-report.txt
+              echo "Ungrouped Slither Output" | tee -a security-report.txt
+              echo "========================================" | tee -a security-report.txt
+              cat raw-slither.txt | tee -a security-report.txt
+              echo "\n\n" | tee -a security-report.txt
+            }
+
             echo "========================================" | tee -a security-report.txt
             echo "END OF SLITHER ANALYSIS" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
