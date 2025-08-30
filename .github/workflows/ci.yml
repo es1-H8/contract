@@ -43,17 +43,29 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install dependencies
+      - name: Install dependencies (and legacy libs for imports)
         run: |
           npm install
-          # Ensure upgradeable contracts are available for imports even if not in package.json
-          npm install @openzeppelin/contracts-upgradeable --no-save
+          # Ensure packages used by legacy imports exist even if not in package.json
+          npm install @openzeppelin/contracts-upgradeable openzeppelin-solidity zeppelin-solidity --no-save
+
+      - name: Ensure remappings.txt (only if missing)
+        run: |
+          if [ ! -f remappings.txt ]; then
+            echo "@openzeppelin/=node_modules/@openzeppelin/" > remappings.txt
+            echo "@chainlink/=node_modules/@chainlink/" >> remappings.txt
+            echo "@pythnetwork/=node_modules/@pythnetwork/" >> remappings.txt
+            echo "erc721a/=node_modules/erc721a/" >> remappings.txt
+            echo "@uniswap/=node_modules/@uniswap/" >> remappings.txt
+            echo "zeppelin-solidity/=node_modules/zeppelin-solidity/" >> remappings.txt
+            echo "openzeppelin-solidity/=node_modules/openzeppelin-solidity/" >> remappings.txt
+          fi
+          echo "=== REMAPPINGS IN USE ==="
+          cat remappings.txt || true
 
       - name: Verify dependencies for import resolution
         run: |
           echo "=== VERIFYING DEPENDENCIES FOR IMPORT RESOLUTION ==="
-          echo "Checking if required packages are installed:"
-          echo ""
           echo "OpenZeppelin contracts:"
           ls -la node_modules/@openzeppelin/contracts/ | head -5 || true
           echo ""
@@ -68,6 +80,12 @@ jobs:
           echo ""
           echo "ERC721A:"
           ls -la node_modules/erc721a/ | head -5 || true
+          echo ""
+          echo "Legacy zeppelin-solidity:"
+          ls -la node_modules/zeppelin-solidity/ | head -5 || true
+          echo ""
+          echo "Legacy openzeppelin-solidity:"
+          ls -la node_modules/openzeppelin-solidity/ | head -5 || true
           echo ""
           echo "Dependencies verification complete"
 
@@ -163,7 +181,7 @@ jobs:
       #     fi
 
       # ==============================
-      # Echidna (Docker: remove --check-assert, pass include paths)
+      # Echidna (fix: use --solc-remaps via crytic-args, no base/include flags)
       # ==============================
       - name: Run Echidna analysis
         run: |
@@ -178,6 +196,12 @@ jobs:
           fi
 
           docker pull trailofbits/echidna:latest
+
+          # Build a single string of remaps for crytic-compile
+          REMAPS="$(tr '\n' ' ' < remappings.txt)"
+          if [ -z "$REMAPS" ]; then
+            REMAPS="@openzeppelin/=node_modules/@openzeppelin/ @chainlink/=node_modules/@chainlink/ @pythnetwork/=node_modules/@pythnetwork/ erc721a/=node_modules/erc721a/ @uniswap/=node_modules/@uniswap/ zeppelin-solidity/=node_modules/zeppelin-solidity/ openzeppelin-solidity/=node_modules/openzeppelin-solidity/"
+          fi
 
           for contract in contracts/*.sol; do
             [ -f "$contract" ] || continue
@@ -195,7 +219,7 @@ jobs:
               echidna-test "contracts/$contract_file" \
                 --contract "$contract_name" \
                 --config echidna.yaml \
-                --crytic-args '--base-path . --include-path node_modules' \
+                --crytic-args "--solc-remaps $REMAPS" \
               2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
@@ -227,7 +251,6 @@ jobs:
             esac
           }
 
-          # Install a small set once
           need_versions="$(grep -hRoE "pragma solidity[^;]*;" contracts | sed -E 's/.*solidity([^;]*);/\1/' | tr -d ' ' | sort -u)"
           base_versions="0.4.26 0.8.20 0.8.22 0.8.25 0.8.26 0.8.28 0.8.29 0.8.30"
           for tok in $need_versions $base_versions; do
@@ -246,7 +269,6 @@ jobs:
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # Old solc (0.4.x) doesn't support --base-path; run without it
             if echo "$solv" | grep -q "^0\.4"; then
               myth analyze "$contract" \
                 --solv "$solv" \
