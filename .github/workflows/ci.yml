@@ -181,7 +181,7 @@ jobs:
       #     fi
 
       # ==============================
-      # Echidna (use remappings.txt; no crytic-args)
+      # Echidna (assert-mode + per-file solc + include paths; no --contract)
       # ==============================
       - name: Run Echidna analysis
         run: |
@@ -197,23 +197,40 @@ jobs:
 
           docker pull trailofbits/echidna:latest
 
+          pick_version() {
+            raw="$1"
+            v="${raw//^/}"; v="${v//>=/}"; v="${v//~=/}"; v="${v// /}"
+            if echo "$v" | grep -q "^0\.4"; then echo "0.4.26"; return; fi
+            case "$v" in
+              0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20) echo "$v" ;;
+              0.8.*) echo "0.8.26" ;;
+              *) echo "0.8.20" ;;
+            esac
+          }
+
           for contract in contracts/*.sol; do
             [ -f "$contract" ] || continue
             contract_file="$(basename "$contract")"
-            contract_name="${contract_file%.sol}"
+
+            # detect pragma
+            pragma_line=$(grep -m1 -E "pragma\s+solidity" "$contract" || true)
+            version_token=$(echo "$pragma_line" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
+            solv=$(pick_version "$version_token")
 
             echo "========================================" | tee -a security-report.txt
-            echo "Fuzz Testing: $contract_file" | tee -a security-report.txt
+            echo "Fuzz Testing: $contract_file (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # Rely on remappings.txt at repo root; crytic-compile picks it up automatically
+            # Use assertions as tests, include node_modules for imports, and pin solc per file
             docker run --rm \
               -v "$PWD":/src \
               -w /src \
               trailofbits/echidna:latest \
               echidna-test "contracts/$contract_file" \
-                --contract "$contract_name" \
+                --test-mode assertion \
                 --config echidna.yaml \
+                --solc-args "--base-path . --include-path node_modules" \
+                --crytic-args "--solc-version $solv" \
               2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
