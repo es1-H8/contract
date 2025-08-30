@@ -180,23 +180,36 @@ jobs:
       #       echo "No Slither analysis output found" | tee -a security-report.txt
       #     fi
 
-      # ==============================
-      # Echidna Installation & Run (via Docker)
+            # ==============================
+      # Echidna (official Docker image)
       # ==============================
       - name: Run Echidna analysis
         run: |
           echo "=== ECHIDNA SECURITY ANALYSIS ===" | tee -a security-report.txt
-          echo "Tool: Echidna (Docker)" | tee -a security-report.txt
+          echo "Tool: Echidna (ghcr.io/crytic/echidna)" | tee -a security-report.txt
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
 
+          # Minimal config ensures runs don’t fail if no properties yet
+          if [ ! -f echidna.yaml ]; then
+            echo "testLimit: 100" > echidna.yaml
+          fi
+
+          # Loop each contract just like your other tools
           for contract in contracts/*.sol; do
             if [ -f "$contract" ]; then
               contract_name=$(basename "$contract")
               echo "========================================" | tee -a security-report.txt
               echo "Fuzz Testing: $contract_name" | tee -a security-report.txt
               echo "========================================" | tee -a security-report.txt
-              docker run --rm -v $PWD:/src trailofbits/eth-security-toolbox echidna-test "/src/$contract" --contract "$contract_name" --config /src/echidna.yaml 2>&1 | tee -a security-report.txt || true
+
+              docker run --rm \
+                -v "$PWD":/src \
+                -w /src \
+                ghcr.io/crytic/echidna:latest \
+                echidna-test "$contract" --contract "$contract_name" --config echidna.yaml --check-assert 2>&1 \
+                | tee -a security-report.txt || true
+
               echo "" | tee -a security-report.txt
             fi
           done
