@@ -181,7 +181,7 @@ jobs:
       #     fi
 
       # ==============================
-      # Echidna (fix: use --solc-remaps via crytic-args, no base/include flags)
+      # Echidna (use remappings.txt; no crytic-args)
       # ==============================
       - name: Run Echidna analysis
         run: |
@@ -197,12 +197,6 @@ jobs:
 
           docker pull trailofbits/echidna:latest
 
-          # Build a single string of remaps for crytic-compile
-          REMAPS="$(tr '\n' ' ' < remappings.txt)"
-          if [ -z "$REMAPS" ]; then
-            REMAPS="@openzeppelin/=node_modules/@openzeppelin/ @chainlink/=node_modules/@chainlink/ @pythnetwork/=node_modules/@pythnetwork/ erc721a/=node_modules/erc721a/ @uniswap/=node_modules/@uniswap/ zeppelin-solidity/=node_modules/zeppelin-solidity/ openzeppelin-solidity/=node_modules/openzeppelin-solidity/"
-          fi
-
           for contract in contracts/*.sol; do
             [ -f "$contract" ] || continue
             contract_file="$(basename "$contract")"
@@ -212,6 +206,7 @@ jobs:
             echo "Fuzz Testing: $contract_file" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
+            # Rely on remappings.txt at repo root; crytic-compile picks it up automatically
             docker run --rm \
               -v "$PWD":/src \
               -w /src \
@@ -219,7 +214,6 @@ jobs:
               echidna-test "contracts/$contract_file" \
                 --contract "$contract_name" \
                 --config echidna.yaml \
-                --crytic-args "--solc-remaps $REMAPS" \
               2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
@@ -270,8 +264,10 @@ jobs:
             echo "========================================" | tee -a security-report.txt
 
             if echo "$solv" | grep -q "^0\.4"; then
+              # Old solc (0.4.x) -> allow node_modules paths instead of base-path
               myth analyze "$contract" \
                 --solv "$solv" \
+                --solc-args "--allow-paths .,node_modules" \
                 --execution-timeout 120 \
                 --max-depth 16 \
                 --create-timeout 60 \
