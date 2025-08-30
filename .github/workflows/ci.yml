@@ -65,128 +65,172 @@ jobs:
           echo ""
           echo "Dependencies verification complete"
 
-      - name: Install Solhint
-        run: npm install -g solhint
+      # - name: Install Solhint
+      #   run: npm install -g solhint
 
-      - name: Run Solhint linting
+      # - name: Run Solhint linting
+      #   run: |
+      #     echo "=== SOLHINT SECURITY ANALYSIS ===" | tee security-report.txt
+      #     echo "Tool: Solhint" | tee -a security-report.txt
+      #     echo "Timestamp: $(date)" | tee -a security-report.txt
+      #     echo "" | tee -a security-report.txt
+      #     
+      #     echo "Analyzing contracts:" | tee -a security-report.txt
+      #     ls -la contracts/*.sol | tee -a security-report.txt
+      #     echo "" | tee -a security-report.txt
+      #     
+      #     # Process each contract individually to ensure complete analysis
+      #     for contract in contracts/*.sol; do
+      #       if [ -f "$contract" ]; then
+      #         contract_name=$(basename "$contract")
+      #         echo "========================================" | tee -a security-report.txt
+      #         echo "Analyzing: $contract_name" | tee -a security-report.txt
+      #         echo "========================================" | tee -a security-report.txt
+      #         npx solhint "$contract" --formatter=unix | tee -a security-report.txt || echo "No issues found in $contract_name" | tee -a security-report.txt
+      #         echo "" | tee -a security-report.txt
+      #       fi
+      #     done
+      #     
+      #     # Show analysis summary
+      #     TOTAL_CONTRACTS=$(ls contracts/*.sol | wc -l)
+      #     echo "=== SOLHINT ANALYSIS COMPLETE ===" | tee -a security-report.txt
+      #     echo "Total contracts analyzed: $TOTAL_CONTRACTS" | tee -a security-report.txt
+      #     echo "" | tee -a security-report.txt
+
+      # - name: Install Slither
+      #   run: pip install slither-analyzer
+
+      # - name: Run Slither analysis
+      #   run: |
+      #     echo "=== SLITHER SECURITY ANALYSIS ===" | tee -a security-report.txt
+      #     echo "Tool: Slither" | tee -a security-report.txt
+      #     echo "Timestamp: $(date)" | tee -a security-report.txt
+      #     echo "" | tee -a security-report.txt
+      #     
+      #     # Create remappings.txt for proper import resolution
+      #     echo "Creating remappings.txt for import resolution..."
+      #     echo "@openzeppelin/=node_modules/@openzeppelin/" > remappings.txt
+      #     echo "@chainlink/=node_modules/@chainlink/" >> remappings.txt
+      #     echo "@pythnetwork/=node_modules/@pythnetwork/" >> remappings.txt
+      #     echo "erc721a/=node_modules/erc721a/" >> remappings.txt
+      #     echo "@uniswap/=node_modules/@uniswap/" >> remappings.txt
+      #     echo "zeppelin-solidity/=node_modules/zeppelin-solidity/" >> remappings.txt
+      #     echo "openzeppelin-solidity/=node_modules/openzeppelin-solidity/" >> remappings.txt
+      #     
+      #     echo "Remappings created:"
+      #     cat remappings.txt
+      #     echo ""
+      #     
+      #     # Run Slither once on the entire project for proper import resolution
+      #     echo "Running Slither analysis on entire project for import resolution..."
+      #     slither . 2>&1 | tee -a raw-slither.txt || echo "Slither analysis completed" | tee -a raw-slither.txt
+      #     
+      #     echo "" | tee -a security-report.txt
+      #     echo "----------------------------------------" | tee -a security-report.txt
+      #     echo "Slither Analysis Results" | tee -a security-report.txt
+      #     echo "----------------------------------------" | tee -a security-report.txt
+      #     
+      #     # Show which contracts were analyzed
+      #     echo "Contracts analyzed:" | tee -a security-report.txt
+      #     ls contracts/*.sol | sed 's/contracts\//  - /' | tee -a security-report.txt
+      #     echo "" | tee -a security-report.txt
+      #     
+      #     echo "" | tee -a security-report.txt
+      #     echo "----------------------------------------" | tee -a security-report.txt
+      #     echo "Formatted Slither Report (Grouped by Contract)" | tee -a security-report.txt
+      #     echo "----------------------------------------" | tee -a security-report.txt
+      #     
+      #     if [ -s raw-slither.txt ]; then
+      #       awk '
+      #         {
+      #           line = $0
+      #           while (match(line, /contracts\/([A-Za-z0-9_]+)\.sol/, m)) {
+      #             name = m[1]
+      #             if (!(name in seen)) { seen[name] = 1; order[++n] = name }
+      #             grouped[name] = grouped[name] $0 "\n"
+      #             line = substr(line, RSTART + RLENGTH)
+      #           }
+      #         }
+      #         END {
+      #           if (n == 0) {
+      #             print "No per-contract matches found; showing raw Slither output.\n"
+      #             exit 1
+      #           }
+      #           for (i = 1; i <= n; i++) {
+      #             name = order[i]
+      #             print "========================================"
+      #             print "Contract: " name
+      #             print "========================================"
+      #             printf "%s", grouped[name]
+      #             print "\n\n\n\n\n\n"
+      #           }
+      #         }
+      #       ' raw-slither.txt | tee -a security-report.txt || {
+      #         echo "========================================" | tee -a security-report.txt
+      #         echo "Ungrouped Slither Output" | tee -a security-report.txt
+      #         echo "========================================" | tee -a security-report.txt
+      #         cat raw-slither.txt | tee -a security-report.txt
+      #         echo "\n\n" | tee -a security-report.txt
+      #       }
+      # 
+      #       echo "========================================" | tee -a security-report.txt
+      #       echo "END OF SLITHER ANALYSIS" | tee -a security-report.txt
+      #       echo "========================================" | tee -a security-report.txt
+      #     else
+      #       echo "No Slither analysis output found" | tee -a security-report.txt
+      #     fi
+
+      # ==============================
+      # Echidna Installation & Run
+      # ==============================
+      - name: Install Echidna
         run: |
-          echo "=== SOLHINT SECURITY ANALYSIS ===" | tee security-report.txt
-          echo "Tool: Solhint" | tee -a security-report.txt
+          sudo apt-get update
+          sudo apt-get install -y cabal-install
+          cabal update
+          cabal install echidna
+
+      - name: Run Echidna analysis
+        run: |
+          echo "=== ECHIDNA SECURITY ANALYSIS ===" | tee -a security-report.txt
+          echo "Tool: Echidna" | tee -a security-report.txt
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
           
-          echo "Analyzing contracts:" | tee -a security-report.txt
-          ls -la contracts/*.sol | tee -a security-report.txt
+          for contract in contracts/*.sol; do
+            if [ -f "$contract" ]; then
+              contract_name=$(basename "$contract")
+              echo "========================================" | tee -a security-report.txt
+              echo "Fuzz Testing: $contract_name" | tee -a security-report.txt
+              echo "========================================" | tee -a security-report.txt
+              echidna-test "$contract" --contract "$contract_name" --config echidna.yaml 2>&1 | tee -a security-report.txt || true
+              echo "" | tee -a security-report.txt
+            fi
+          done
+
+      # ==============================
+      # Mythril Installation & Run
+      # ==============================
+      - name: Install Mythril
+        run: pip install mythril
+
+      - name: Run Mythril analysis
+        run: |
+          echo "=== MYTHRIL SECURITY ANALYSIS ===" | tee -a security-report.txt
+          echo "Tool: Mythril" | tee -a security-report.txt
+          echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
           
-          # Process each contract individually to ensure complete analysis
           for contract in contracts/*.sol; do
             if [ -f "$contract" ]; then
               contract_name=$(basename "$contract")
               echo "========================================" | tee -a security-report.txt
               echo "Analyzing: $contract_name" | tee -a security-report.txt
               echo "========================================" | tee -a security-report.txt
-              npx solhint "$contract" --formatter=unix | tee -a security-report.txt || echo "No issues found in $contract_name" | tee -a security-report.txt
+              myth analyze "$contract" --solv 0.8.20 --execution-timeout 60 2>&1 | tee -a security-report.txt || true
               echo "" | tee -a security-report.txt
             fi
           done
-          
-          # Show analysis summary
-          TOTAL_CONTRACTS=$(ls contracts/*.sol | wc -l)
-          echo "=== SOLHINT ANALYSIS COMPLETE ===" | tee -a security-report.txt
-          echo "Total contracts analyzed: $TOTAL_CONTRACTS" | tee -a security-report.txt
-          echo "" | tee -a security-report.txt
-
-      - name: Install Slither
-        run: pip install slither-analyzer
-
-      - name: Run Slither analysis
-        run: |
-          echo "=== SLITHER SECURITY ANALYSIS ===" | tee -a security-report.txt
-          echo "Tool: Slither" | tee -a security-report.txt
-          echo "Timestamp: $(date)" | tee -a security-report.txt
-          echo "" | tee -a security-report.txt
-          
-          # Create remappings.txt for proper import resolution
-          echo "Creating remappings.txt for import resolution..."
-          echo "@openzeppelin/=node_modules/@openzeppelin/" > remappings.txt
-          echo "@chainlink/=node_modules/@chainlink/" >> remappings.txt
-          echo "@pythnetwork/=node_modules/@pythnetwork/" >> remappings.txt
-          echo "erc721a/=node_modules/erc721a/" >> remappings.txt
-          echo "@uniswap/=node_modules/@uniswap/" >> remappings.txt
-          echo "zeppelin-solidity/=node_modules/zeppelin-solidity/" >> remappings.txt
-          echo "openzeppelin-solidity/=node_modules/openzeppelin-solidity/" >> remappings.txt
-          
-          echo "Remappings created:"
-          cat remappings.txt
-          echo ""
-          
-          # Run Slither once on the entire project for proper import resolution
-          echo "Running Slither analysis on entire project for import resolution..."
-          slither . 2>&1 | tee -a raw-slither.txt || echo "Slither analysis completed" | tee -a raw-slither.txt
-          
-          echo "" | tee -a security-report.txt
-          echo "----------------------------------------" | tee -a security-report.txt
-          echo "Slither Analysis Results" | tee -a security-report.txt
-          echo "----------------------------------------" | tee -a security-report.txt
-          
-          # Show which contracts were analyzed
-          echo "Contracts analyzed:" | tee -a security-report.txt
-          ls contracts/*.sol | sed 's/contracts\//  - /' | tee -a security-report.txt
-          echo "" | tee -a security-report.txt
-          
-          echo "" | tee -a security-report.txt
-          echo "----------------------------------------" | tee -a security-report.txt
-          echo "Formatted Slither Report (Grouped by Contract)" | tee -a security-report.txt
-          echo "----------------------------------------" | tee -a security-report.txt
-          
-          if [ -s raw-slither.txt ]; then
-            # Group findings by the basename of files under contracts/, e.g., Ai.sol -> "Ai"
-            # Keeps ordering of first appearance; prints 6 blank lines between contracts.
-            awk '
-              {
-                line = $0
-                # Extract ALL occurrences of contracts/<Name>.sol in the line (some lines contain multiple)
-                while (match(line, /contracts\/([A-Za-z0-9_]+)\.sol/, m)) {
-                  name = m[1]
-                  if (!(name in seen)) { seen[name] = 1; order[++n] = name }
-                  grouped[name] = grouped[name] $0 "\n"
-                  # Continue searching the remainder of the line (after the match)
-                  line = substr(line, RSTART + RLENGTH)
-                }
-              }
-              END {
-                if (n == 0) {
-                  # Fallback if nothing matched contracts/<Name>.sol
-                  print "No per-contract matches found; showing raw Slither output.\n"
-                  exit 1
-                }
-                for (i = 1; i <= n; i++) {
-                  name = order[i]
-                  print "========================================"
-                  print "Contract: " name
-                  print "========================================"
-                  # Print that contract’s collected lines
-                  printf "%s", grouped[name]
-                  # 6 blank lines to separate contracts clearly for Excel pasting
-                  print "\n\n\n\n\n\n"
-                }
-              }
-            ' raw-slither.txt | tee -a security-report.txt || {
-              # If grouping didn’t find any matches, append raw output to keep behavior safe
-              echo "========================================" | tee -a security-report.txt
-              echo "Ungrouped Slither Output" | tee -a security-report.txt
-              echo "========================================" | tee -a security-report.txt
-              cat raw-slither.txt | tee -a security-report.txt
-              echo "\n\n" | tee -a security-report.txt
-            }
-
-            echo "========================================" | tee -a security-report.txt
-            echo "END OF SLITHER ANALYSIS" | tee -a security-report.txt
-            echo "========================================" | tee -a security-report.txt
-          else
-            echo "No Slither analysis output found" | tee -a security-report.txt
-          fi
 
       - name: Upload full security report
         uses: actions/upload-artifact@v4
