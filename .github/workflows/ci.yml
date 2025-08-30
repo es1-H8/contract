@@ -74,12 +74,9 @@ jobs:
       #     echo "Tool: Solhint" | tee -a security-report.txt
       #     echo "Timestamp: $(date)" | tee -a security-report.txt
       #     echo "" | tee -a security-report.txt
-      #     
       #     echo "Analyzing contracts:" | tee -a security-report.txt
       #     ls -la contracts/*.sol | tee -a security-report.txt
       #     echo "" | tee -a security-report.txt
-      #     
-      #     # Process each contract individually to ensure complete analysis
       #     for contract in contracts/*.sol; do
       #       if [ -f "$contract" ]; then
       #         contract_name=$(basename "$contract")
@@ -90,8 +87,6 @@ jobs:
       #         echo "" | tee -a security-report.txt
       #       fi
       #     done
-      #     
-      #     # Show analysis summary
       #     TOTAL_CONTRACTS=$(ls contracts/*.sol | wc -l)
       #     echo "=== SOLHINT ANALYSIS COMPLETE ===" | tee -a security-report.txt
       #     echo "Total contracts analyzed: $TOTAL_CONTRACTS" | tee -a security-report.txt
@@ -106,8 +101,6 @@ jobs:
       #     echo "Tool: Slither" | tee -a security-report.txt
       #     echo "Timestamp: $(date)" | tee -a security-report.txt
       #     echo "" | tee -a security-report.txt
-      #     
-      #     # Create remappings.txt for proper import resolution
       #     echo "Creating remappings.txt for import resolution..."
       #     echo "@openzeppelin/=node_modules/@openzeppelin/" > remappings.txt
       #     echo "@chainlink/=node_modules/@chainlink/" >> remappings.txt
@@ -116,46 +109,32 @@ jobs:
       #     echo "@uniswap/=node_modules/@uniswap/" >> remappings.txt
       #     echo "zeppelin-solidity/=node_modules/zeppelin-solidity/" >> remappings.txt
       #     echo "openzeppelin-solidity/=node_modules/openzeppelin-solidity/" >> remappings.txt
-      #     
-      #     echo "Remappings created:"
       #     cat remappings.txt
       #     echo ""
-      #     
-      #     # Run Slither once on the entire project for proper import resolution
       #     echo "Running Slither analysis on entire project for import resolution..."
       #     slither . 2>&1 | tee -a raw-slither.txt || echo "Slither analysis completed" | tee -a raw-slither.txt
-      #     
       #     echo "" | tee -a security-report.txt
       #     echo "----------------------------------------" | tee -a security-report.txt
       #     echo "Slither Analysis Results" | tee -a security-report.txt
       #     echo "----------------------------------------" | tee -a security-report.txt
-      #     
-      #     # Show which contracts were analyzed
       #     echo "Contracts analyzed:" | tee -a security-report.txt
       #     ls contracts/*.sol | sed 's/contracts\//  - /' | tee -a security-report.txt
       #     echo "" | tee -a security-report.txt
-      #     
       #     echo "" | tee -a security-report.txt
       #     echo "----------------------------------------" | tee -a security-report.txt
       #     echo "Formatted Slither Report (Grouped by Contract)" | tee -a security-report.txt
       #     echo "----------------------------------------" | tee -a security-report.txt
-      #     
       #     if [ -s raw-slither.txt ]; then
       #       awk '
-      #         {
-      #           line = $0
+      #         { line = $0
       #           while (match(line, /contracts\/([A-Za-z0-9_]+)\.sol/, m)) {
       #             name = m[1]
       #             if (!(name in seen)) { seen[name] = 1; order[++n] = name }
       #             grouped[name] = grouped[name] $0 "\n"
       #             line = substr(line, RSTART + RLENGTH)
-      #           }
-      #         }
+      #           } }
       #         END {
-      #           if (n == 0) {
-      #             print "No per-contract matches found; showing raw Slither output.\n"
-      #             exit 1
-      #           }
+      #           if (n == 0) { print "No per-contract matches found; showing raw Slither output.\n"; exit 1 }
       #           for (i = 1; i <= n; i++) {
       #             name = order[i]
       #             print "========================================"
@@ -163,16 +142,13 @@ jobs:
       #             print "========================================"
       #             printf "%s", grouped[name]
       #             print "\n\n\n\n\n\n"
-      #           }
-      #         }
-      #       ' raw-slither.txt | tee -a security-report.txt || {
+      #           } }' raw-slither.txt | tee -a security-report.txt || {
       #         echo "========================================" | tee -a security-report.txt
       #         echo "Ungrouped Slither Output" | tee -a security-report.txt
       #         echo "========================================" | tee -a security-report.txt
       #         cat raw-slither.txt | tee -a security-report.txt
       #         echo "\n\n" | tee -a security-report.txt
       #       }
-      #
       #       echo "========================================" | tee -a security-report.txt
       #       echo "END OF SLITHER ANALYSIS" | tee -a security-report.txt
       #       echo "========================================" | tee -a security-report.txt
@@ -181,12 +157,12 @@ jobs:
       #     fi
 
       # ==============================
-      # Echidna via Trail of Bits toolbox
+      # Echidna (Docker Hub: trailofbits/echidna)
       # ==============================
       - name: Run Echidna analysis
         run: |
           echo "=== ECHIDNA SECURITY ANALYSIS ===" | tee -a security-report.txt
-          echo "Tool: Echidna (trailofbits/eth-security-toolbox)" | tee -a security-report.txt
+          echo "Tool: Echidna (trailofbits/echidna)" | tee -a security-report.txt
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
 
@@ -195,8 +171,8 @@ jobs:
             echo "testLimit: 100" > echidna.yaml
           fi
 
-          # Pull once
-          docker pull trailofbits/eth-security-toolbox:latest
+          # Pull once (public image that includes echidna-test)
+          docker pull trailofbits/echidna:latest
 
           for contract in contracts/*.sol; do
             [ -f "$contract" ] || continue
@@ -207,19 +183,18 @@ jobs:
             echo "Fuzz Testing: $contract_file" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # Use a login shell inside the container so echidna-test is on PATH
             docker run --rm \
               -v "$PWD":/src \
               -w /src \
-              trailofbits/eth-security-toolbox:latest \
-              bash -lc 'echidna-test "contracts/'"$contract_file"'" --contract "'"$contract_name"'" --config echidna.yaml --check-assert' \
+              trailofbits/echidna:latest \
+              echidna-test "contracts/$contract_file" --contract "$contract_name" --config echidna.yaml --check-assert \
               2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
           done
 
       # ==============================
-      # Mythril (auto solc + include paths)
+      # Mythril (auto solc + strict timeouts)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
@@ -238,19 +213,23 @@ jobs:
             v="${raw//^/}"; v="${v//>=/}"; v="${v//~=/}"; v="${v// /}"
             if echo "$v" | grep -q "^0\.4"; then echo "0.4.26"; return; fi
             case "$v" in
-              0.8.3[0-9]*|0.8.2[0-9]*|0.8.1[0-9]*|0.8.0*) echo "$v" ;;
               0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20) echo "$v" ;;
+              0.8.*) echo "0.8.20" ;;
               *) echo "0.8.20" ;;
             esac
           }
 
+          # Unique version tokens from pragmas
           versions=$(grep -hRoE "pragma solidity[^;]*;" contracts | sed -E 's/.*solidity([^;]*);/\1/' | tr -d ' ' | sort -u)
-          # Install a useful set
           base_versions="0.4.26 0.8.20 0.8.22 0.8.25 0.8.26 0.8.28 0.8.29 0.8.30"
           for tok in $versions $base_versions; do
-            v=$(pick_version "$tok"); [ -n "$v" ] && solc-select install "$v" || true
+            v=$(pick_version "$tok")
+            if ! solc-select versions | grep -q " $v "; then
+              solc-select install "$v" || true
+            fi
           done
 
+          # Per-contract analysis with tight limits to avoid hanging
           for contract in contracts/*.sol; do
             [ -f "$contract" ] || continue
             name=$(basename "$contract")
@@ -264,8 +243,12 @@ jobs:
 
             myth analyze "$contract" \
               --solv "$solv" \
-              --solc-args "--base-path . --include-path node_modules" 2>&1 \
-              | tee -a security-report.txt || true
+              --solc-args "--base-path . --include-path node_modules" \
+              --execution-timeout 300 \
+              --max-depth 16 \
+              --create-timeout 60 \
+              --solver-timeout 10000 \
+              2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
           done
