@@ -181,29 +181,22 @@ jobs:
       #     fi
 
       # ==============================
-      # Echidna Installation & Run
+      # Echidna Installation & Run (via Docker)
       # ==============================
-      - name: Install Echidna
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y cabal-install
-          cabal update
-          cabal install echidna
-
       - name: Run Echidna analysis
         run: |
           echo "=== ECHIDNA SECURITY ANALYSIS ===" | tee -a security-report.txt
-          echo "Tool: Echidna" | tee -a security-report.txt
+          echo "Tool: Echidna (Docker)" | tee -a security-report.txt
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
-          
+
           for contract in contracts/*.sol; do
             if [ -f "$contract" ]; then
               contract_name=$(basename "$contract")
               echo "========================================" | tee -a security-report.txt
               echo "Fuzz Testing: $contract_name" | tee -a security-report.txt
               echo "========================================" | tee -a security-report.txt
-              echidna-test "$contract" --contract "$contract_name" --config echidna.yaml 2>&1 | tee -a security-report.txt || true
+              docker run --rm -v $PWD:/src trailofbits/eth-security-toolbox echidna-test "/src/$contract" --contract "$contract_name" --config /src/echidna.yaml 2>&1 | tee -a security-report.txt || true
               echo "" | tee -a security-report.txt
             fi
           done
