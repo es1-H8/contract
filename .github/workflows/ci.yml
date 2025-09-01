@@ -53,6 +53,9 @@ jobs:
           echo "=== Skips staged in $SKIP_DIR ==="
           ls -la "$SKIP_DIR" || echo "(none)"
 
+      - name: Hardhat clean (avoid stale build-info)
+        run: npx hardhat clean
+
       - name: Compile contracts
         run: |
           echo "=== HARDHAT COMPILE ==="
