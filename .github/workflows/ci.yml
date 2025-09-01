@@ -24,58 +24,46 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # Resilient compile:
-      # 1) Try compiling everything.
-      # 2) If Hardhat fails, detect the offending contract(s), temporarily move them out,
-      #    and retry. Repeat up to 3 passes. Nothing in your sources is modified.
-      - name: Compile contracts (resilient)
+      # NEW: Pre-skip known-incompatible sources (temporary; restored after compile)
+      - name: Pre-scan and temporarily skip incompatible contracts
         run: |
-          echo "=== HARDHAT COMPILE (resilient) ==="
           set -e
-          SKIP_DIR=".ci_skipped"
+          SKIP_DIR=".ci_skipped_compile"
           mkdir -p "$SKIP_DIR"
-          passes=0
-          while [ $passes -lt 3 ]; do
-            passes=$((passes+1))
-            echo "Compile attempt #$passes"
-            if npx hardhat compile; then
-              echo "Compile OK"
-              break
-            fi
-            echo "Compile failed, inspecting errors…"
-            # Try to extract one or more file paths from Hardhat/solc error lines
-            # format usually contains: " --> contracts/Name.sol:line:col:"
-            offenders=$( (echo) 2>&1 | true ) # placeholder to keep pipe structure
-            offenders=$(grep -Eo "contracts/[^: ]+\.sol" -a ./artifacts/build-info/* 2>/dev/null || true)
-            # If build-info didn’t capture paths, fall back to last Hardhat output in console
-            if [ -z "$offenders" ]; then
-              offenders=$(grep -Eo "contracts/[^: ]+\.sol" -a ./hardhat.config.* 2>/dev/null || true)
-            fi
-            if [ -z "$offenders" ]; then
-              # Best-effort: parse the most recent compile output from GH Actions logs file (not always available)
-              offenders=$(grep -Eo "contracts/[^: ]+\.sol" -a ./* 2>/dev/null | head -n 1 || true)
-            fi
 
-            if [ -z "$offenders" ]; then
-              echo "Could not identify offending file(s). Proceeding without compile gate."
-              break
+          echo "=== Pre-scan for incompatible contracts ==="
+
+          # 1) Skip all 0.4.x contracts for the compile phase (you asked not to edit them).
+          while IFS= read -r -d '' f; do
+            echo "Skip (pragma 0.4.x): $f"
+            mv "$f" "$SKIP_DIR/$(basename "$f")"
+          done < <(grep -Z -l -E 'pragma\s+solidity\s+\^?0\.4' contracts/*.sol || true)
+
+          # 2) Skip files that use legacy Ownable(msg.sender) pattern (can’t edit constructors).
+          # Heuristic: file mentions both 'constructor' and 'Ownable('
+          while IFS= read -r -d '' f; do
+            if grep -q 'constructor' "$f" && grep -q 'Ownable(' "$f"; then
+              echo "Skip (Ownable(msg.sender) pattern): $f"
+              mv "$f" "$SKIP_DIR/$(basename "$f")"
             fi
+          done < <(grep -Z -l 'Ownable(' contracts/*.sol || true)
 
-            echo "Will temporarily skip:"
-            echo "$offenders" | sort -u
+          echo "=== Skips staged in $SKIP_DIR ==="
+          ls -la "$SKIP_DIR" || echo "(none)"
 
-            # Move offenders to a temp area so Hardhat won’t see them next pass
-            for f in $(echo "$offenders" | sort -u); do
-              dest="$SKIP_DIR/$(basename "$f")"
-              if [ -f "$f" ]; then
-                echo "Skipping $f -> $dest"
-                mv "$f" "$dest"
-              fi
-            done
-          done
+      - name: Compile contracts
+        run: |
+          echo "=== HARDHAT COMPILE ==="
+          # If anything still fails here, it's unrelated to the two known patterns we skip.
+          npx hardhat compile
 
-          # Restore any skipped files after compile so they still exist for later steps
+      - name: Restore temporarily skipped contracts
+        if: always()
+        run: |
+          SKIP_DIR=".ci_skipped_compile"
           if [ -d "$SKIP_DIR" ]; then
+            echo "=== Restoring skipped files ==="
+            ls -la "$SKIP_DIR" || true
             mv "$SKIP_DIR"/* contracts/ 2>/dev/null || true
             rmdir "$SKIP_DIR" 2>/dev/null || true
           fi
@@ -246,7 +234,7 @@ jobs:
             file="$(basename "$contract")"
             pragma=$(grep -m1 -E "pragma\s+solidity" "$contract" || true)
 
-            # Only run Echidna on 0.8.x files (keeps the container's solc happy)
+            # Only run Echidna on 0.8.x files
             if ! echo "$pragma" | grep -qE "0\.8"; then
               echo "========================================" | tee -a security-report.txt
               echo "Fuzz Testing: $file (skipped: Echidna run limited to 0.8.x)" | tee -a security-report.txt
@@ -298,10 +286,9 @@ jobs:
               0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20) echo "$v" ;;
               0.8.*) echo "0.8.26" ;;
               *) echo "0.8.20" ;;
-            esac
-          }
-
-          # Pre-install a few likely solc versions to reduce per-file installs
+            esac }
+          
+          # Pre-install common solc versions
           for v in 0.4.26 0.5.17 0.6.12 0.7.6 0.8.20 0.8.26 0.8.30; do
             solc-select versions | grep -q " $v " || solc-select install "$v" || true
           done
@@ -313,7 +300,7 @@ jobs:
             token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
             solv=$(pick_version "$token")
 
-            # Skip ONLY 0.4.x here, per your rule
+            # Skip ONLY 0.4.x, with your exact message
             if echo "$solv" | grep -q "^0\.4"; then
               echo "========================================" | tee -a security-report.txt
               echo "Analyzing: $name (skipped: Can't compile and I use Mythril on old contracts.)" | tee -a security-report.txt
@@ -326,7 +313,7 @@ jobs:
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # For <0.6, avoid --base-path (older solc lacks it); use -I + allow-paths.
+            # Older solc (0.5/0.6) don’t understand --base-path; use -I + allow-paths
             if echo "$solv" | grep -Eq "^0\.(5|6)\."; then
               myth analyze "$contract" \
                 --solv "$solv" \
