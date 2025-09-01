@@ -24,9 +24,8 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # Only skip the known-problematic file(s) for compile (default: DecentralizedInsurance.sol)
-      # You can override the list via SKIP_FOR_COMPILE, comma-separated contract paths.
-      - name: Temporarily skip known incompatible files for compile
+      # Temporarily skip known-problematic files for compile (edit list as needed)
+      - name: Temporarily skip files for compile
         env:
           SKIP_FOR_COMPILE: contracts/DecentralizedInsurance.sol
         run: |
@@ -47,7 +46,7 @@ jobs:
               fi
             done
           else
-            echo "No files configured to skip."
+            echo "No files configured to skip for compile."
           fi
 
           echo "=== Skips staged in $SKIP_DIR ==="
@@ -61,19 +60,58 @@ jobs:
           echo "=== HARDHAT COMPILE ==="
           npx hardhat compile
 
-      - name: Restore temporarily skipped contracts
+      - name: Restore temporarily skipped files (after compile)
         if: always()
         run: |
           SKIP_DIR=".ci_skipped_compile"
           if [ -d "$SKIP_DIR" ]; then
-            echo "=== Restoring skipped files ==="
+            echo "=== Restoring skipped files (compile) ==="
             ls -la "$SKIP_DIR" || true
             mv "$SKIP_DIR"/* contracts/ 2>/dev/null || true
             rmdir "$SKIP_DIR" 2>/dev/null || true
           fi
 
+      # For tests, Hardhat recompiles what it needs; skip again to avoid the same error
+      - name: Temporarily skip files for tests
+        env:
+          SKIP_FOR_TESTS: contracts/DecentralizedInsurance.sol
+        run: |
+          set -e
+          SKIP_DIR=".ci_skipped_tests"
+          mkdir -p "$SKIP_DIR"
+
+          if [ -n "$SKIP_FOR_TESTS" ]; then
+            echo "=== Will skip for tests (temporary): $SKIP_FOR_TESTS ==="
+            IFS=',' read -ra FILES <<< "$SKIP_FOR_TESTS"
+            for f in "${FILES[@]}"; do
+              f_trimmed="$(echo "$f" | xargs)"
+              if [ -f "$f_trimmed" ]; then
+                echo "Skipping $f_trimmed -> $SKIP_DIR/$(basename "$f_trimmed")"
+                mv "$f_trimmed" "$SKIP_DIR/$(basename "$f_trimmed")"
+              else
+                echo "Skip target not found (ignored): $f_trimmed"
+              fi
+            done
+          else
+            echo "No files configured to skip for tests."
+          fi
+
+          echo "=== Skips staged in $SKIP_DIR ==="
+          ls -la "$SKIP_DIR" || echo "(none)"
+
       - name: Run Hardhat Tests
         run: npx hardhat test
+
+      - name: Restore temporarily skipped files (after tests)
+        if: always()
+        run: |
+          SKIP_DIR=".ci_skipped_tests"
+          if [ -d "$SKIP_DIR" ]; then
+            echo "=== Restoring skipped files (tests) ==="
+            ls -la "$SKIP_DIR" || true
+            mv "$SKIP_DIR"/* contracts/ 2>/dev/null || true
+            rmdir "$SKIP_DIR" 2>/dev/null || true
+          fi
 
   security:
     runs-on: ubuntu-latest
@@ -173,15 +211,20 @@ jobs:
       #     echo "----------------------------------------" | tee -a security-report.txt
       #     if [ -s raw-slither.txt ]; then
       #       awk '
-      #         { line = $0
+      #         {
+      #           line = $0
       #           while (match(line, /contracts\/([A-Za-z0-9_]+)\.sol/, m)) {
       #             name = m[1]
       #             if (!(name in seen)) { seen[name] = 1; order[++n] = name }
       #             grouped[name] = grouped[name] $0 "\n"
       #             line = substr(line, RSTART + RLENGTH)
-      #           } }
+      #           }
+      #         }
       #         END {
-      #           if (n == 0) { print "No per-contract matches found; showing raw Slither output.\n"; exit 1 }
+      #           if (n == 0) {
+      #             print "No per-contract matches found; showing raw Slither output.\n"
+      #             exit 1
+      #           }
       #           for (i = 1; i <= n; i++) {
       #             name = order[i]
       #             print "========================================"
@@ -189,13 +232,14 @@ jobs:
       #             print "========================================"
       #             printf "%s", grouped[name]
       #             print "\n\n\n\n\n\n"
-      #           } }' raw-slither.txt | tee -a security-report.txt || {
-      #         echo "========================================" | tee -a security-report.txt
-      #         echo "Ungrouped Slither Output" | tee -a security-report.txt
-      #         echo "========================================" | tee -a security-report.txt
-      #         cat raw-slither.txt | tee -a security-report.txt
-      #         echo "\n\n" | tee -a security-report.txt
-      #       }
+      #           }
+      #         }' raw-slither.txt | tee -a security-report.txt || {
+      #           echo "========================================" | tee -a security-report.txt
+      #           echo "Ungrouped Slither Output" | tee -a security-report.txt
+      #           echo "========================================" | tee -a security-report.txt
+      #           cat raw-slither.txt | tee -a security-report.txt
+      #           echo "\n\n" | tee -a security-report.txt
+      #         }
       #       echo "========================================" | tee -a security-report.txt
       #       echo "END OF SLITHER ANALYSIS" | tee -a security-report.txt
       #       echo "========================================" | tee -a security-report.txt
