@@ -24,29 +24,31 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # NEW: Pre-skip known-incompatible sources (temporary; restored after compile)
-      - name: Pre-scan and temporarily skip incompatible contracts
+      # Only skip the known-problematic file(s) for compile (default: DecentralizedInsurance.sol)
+      # You can override the list via SKIP_FOR_COMPILE, comma-separated contract paths.
+      - name: Temporarily skip known incompatible files for compile
+        env:
+          SKIP_FOR_COMPILE: contracts/DecentralizedInsurance.sol
         run: |
           set -e
           SKIP_DIR=".ci_skipped_compile"
           mkdir -p "$SKIP_DIR"
 
-          echo "=== Pre-scan for incompatible contracts ==="
-
-          # 1) Skip all 0.4.x contracts for the compile phase (you asked not to edit them).
-          while IFS= read -r -d '' f; do
-            echo "Skip (pragma 0.4.x): $f"
-            mv "$f" "$SKIP_DIR/$(basename "$f")"
-          done < <(grep -Z -l -E 'pragma\s+solidity\s+\^?0\.4' contracts/*.sol || true)
-
-          # 2) Skip files that use legacy Ownable(msg.sender) pattern (can’t edit constructors).
-          # Heuristic: file mentions both 'constructor' and 'Ownable('
-          while IFS= read -r -d '' f; do
-            if grep -q 'constructor' "$f" && grep -q 'Ownable(' "$f"; then
-              echo "Skip (Ownable(msg.sender) pattern): $f"
-              mv "$f" "$SKIP_DIR/$(basename "$f")"
-            fi
-          done < <(grep -Z -l 'Ownable(' contracts/*.sol || true)
+          if [ -n "$SKIP_FOR_COMPILE" ]; then
+            echo "=== Will skip for compile (temporary): $SKIP_FOR_COMPILE ==="
+            IFS=',' read -ra FILES <<< "$SKIP_FOR_COMPILE"
+            for f in "${FILES[@]}"; do
+              f_trimmed="$(echo "$f" | xargs)"
+              if [ -f "$f_trimmed" ]; then
+                echo "Skipping $f_trimmed -> $SKIP_DIR/$(basename "$f_trimmed")"
+                mv "$f_trimmed" "$SKIP_DIR/$(basename "$f_trimmed")"
+              else
+                echo "Skip target not found (ignored): $f_trimmed"
+              fi
+            done
+          else
+            echo "No files configured to skip."
+          fi
 
           echo "=== Skips staged in $SKIP_DIR ==="
           ls -la "$SKIP_DIR" || echo "(none)"
@@ -54,7 +56,6 @@ jobs:
       - name: Compile contracts
         run: |
           echo "=== HARDHAT COMPILE ==="
-          # If anything still fails here, it's unrelated to the two known patterns we skip.
           npx hardhat compile
 
       - name: Restore temporarily skipped contracts
@@ -93,27 +94,13 @@ jobs:
       - name: Verify dependencies for import resolution
         run: |
           echo "=== VERIFYING DEPENDENCIES FOR IMPORT RESOLUTION ==="
-          echo "OpenZeppelin contracts:"
-          ls -la node_modules/@openzeppelin/contracts/ | head -5 || true
-          echo ""
-          echo "OpenZeppelin (upgradeable):"
-          ls -la node_modules/@openzeppelin/contracts-upgradeable/ | head -5 || true
-          echo ""
-          echo "Chainlink contracts:"
-          ls -la node_modules/@chainlink/contracts/ | head -5 || true
-          echo ""
-          echo "Pyth Network:"
-          ls -la node_modules/@pythnetwork/ | head -5 || true
-          echo ""
-          echo "ERC721A:"
-          ls -la node_modules/erc721a/ | head -5 || true
-          echo ""
-          echo "Legacy zeppelin-solidity:"
-          ls -la node_modules/zeppelin-solidity/ | head -5 || true
-          echo ""
-          echo "Legacy openzeppelin-solidity:"
-          ls -la node_modules/openzeppelin-solidity/ | head -5 || true
-          echo ""
+          echo "OpenZeppelin contracts:"; ls -la node_modules/@openzeppelin/contracts/ | head -5 || true; echo
+          echo "OpenZeppelin (upgradeable):"; ls -la node_modules/@openzeppelin/contracts-upgradeable/ | head -5 || true; echo
+          echo "Chainlink contracts:"; ls -la node_modules/@chainlink/contracts/ | head -5 || true; echo
+          echo "Pyth Network:"; ls -la node_modules/@pythnetwork/ | head -5 || true; echo
+          echo "ERC721A:"; ls -la node_modules/erc721a/ | head -5 || true; echo
+          echo "Legacy zeppelin-solidity:"; ls -la node_modules/zeppelin-solidity/ | head -5 || true; echo
+          echo "Legacy openzeppelin-solidity:"; ls -la node_modules/openzeppelin-solidity/ | head -5 || true; echo
           echo "Dependencies verification complete"
 
       # -------------------------
@@ -214,7 +201,7 @@ jobs:
       #     fi
 
       # ==============================
-      # Echidna (simple/stable: only 0.8.x; assertion mode)
+      # Echidna (simple, 0.8.x only)
       # ==============================
       - name: Run Echidna analysis
         run: |
@@ -261,7 +248,7 @@ jobs:
           done
 
       # ==============================
-      # Mythril (skip ONLY 0.4.x; resolve imports)
+      # Mythril (skip ONLY 0.4.x)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
@@ -286,8 +273,9 @@ jobs:
               0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20) echo "$v" ;;
               0.8.*) echo "0.8.26" ;;
               *) echo "0.8.20" ;;
-            esac }
-          
+            esac
+          }
+
           # Pre-install common solc versions
           for v in 0.4.26 0.5.17 0.6.12 0.7.6 0.8.20 0.8.26 0.8.30; do
             solc-select versions | grep -q " $v " || solc-select install "$v" || true
