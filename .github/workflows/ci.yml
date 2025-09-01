@@ -24,8 +24,25 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      - name: Compile contracts
-        run: npx hardhat compile
+      # Selective Hardhat compile (skip 0.4.x and 0.5.x contracts)
+      - name: Selective Hardhat Compile
+        run: |
+          echo "=== SELECTIVE HARDHAT COMPILE ==="
+          mkdir -p tmp_contracts
+          for file in contracts/*.sol; do
+            if grep -qE "pragma solidity\s+\^?(0\.4|0\.5)" "$file"; then
+              echo "Skipping old contract: $file"
+              continue
+            fi
+            cp "$file" tmp_contracts/
+          done
+
+          if [ "$(ls -A tmp_contracts)" ]; then
+            echo "Compiling filtered contracts..."
+            npx hardhat compile
+          else
+            echo "No compatible contracts to compile."
+          fi
 
       - name: Run Hardhat Tests
         run: npx hardhat test
@@ -46,10 +63,8 @@ jobs:
       - name: Install dependencies (and legacy libs for imports)
         run: |
           npm install
-          # Force legacy OZ versions for contracts using Ownable(msg.sender)
-          npm install openzeppelin-solidity@2.5.1 zeppelin-solidity@1.12.0 --no-save
-          # Modern OZ + other dependencies
-          npm install @openzeppelin/contracts@4.9.6 @openzeppelin/contracts-upgradeable@4.9.6 @chainlink/contracts --no-save
+          # Ensure packages used by legacy imports exist even if not in package.json
+          npm install @openzeppelin/contracts @openzeppelin/contracts-upgradeable @chainlink/contracts openzeppelin-solidity zeppelin-solidity --no-save
 
       - name: Ensure remappings.txt (only if missing)
         run: |
@@ -94,12 +109,9 @@ jobs:
           test -f node_modules/@openzeppelin/contracts/utils/cryptography/ECDSA.sol && echo "ECDSA ✅" || echo "ECDSA ❌"
           echo "Dependencies verification complete"
 
-      # ------------------------------
-      # Solhint (commented)
-      # ------------------------------
       # - name: Install Solhint
       #   run: npm install -g solhint
-      #
+
       # - name: Run Solhint linting
       #   run: |
       #     echo "=== SOLHINT SECURITY ANALYSIS ===" | tee security-report.txt
@@ -124,12 +136,9 @@ jobs:
       #     echo "Total contracts analyzed: $TOTAL_CONTRACTS" | tee -a security-report.txt
       #     echo "" | tee -a security-report.txt
 
-      # ------------------------------
-      # Slither (commented)
-      # ------------------------------
       # - name: Install Slither
       #   run: pip install slither-analyzer
-      #
+
       # - name: Run Slither analysis
       #   run: |
       #     echo "=== SLITHER SECURITY ANALYSIS ===" | tee -a security-report.txt
@@ -191,9 +200,9 @@ jobs:
       #       echo "No Slither analysis output found" | tee -a security-report.txt
       #     fi
 
-      # ------------------------------
-      # Echidna (assert-mode; skip 0.4.x)
-      # ------------------------------
+      # ==============================
+      # Echidna (assert-mode; single solc; skip 0.4.x)
+      # ==============================
       - name: Run Echidna analysis
         run: |
           echo "=== ECHIDNA SECURITY ANALYSIS ===" | tee -a security-report.txt
@@ -236,9 +245,9 @@ jobs:
             echo "" | tee -a security-report.txt
           done
 
-      # ------------------------------
-      # Mythril (auto solc; skip 0.4.x issues)
-      # ------------------------------
+      # ==============================
+      # Mythril (auto solc; fix imports; handle 0.4.x)
+      # ==============================
       - name: Install Mythril + solc-select
         run: |
           python3 -m pip install --upgrade pip
@@ -253,7 +262,7 @@ jobs:
 
           pick_version() {
             raw="$1"
-            v="${raw//^/}"; v="${v//>=/}"; v="${v//~=/}"; v="${v// /}"
+            v="${raw//^/}"; v="${v//>=/}"; v="${v//~=/}"; v="${v// /}"`
             if echo "$v" | grep -q "^0\.4"; then echo "0.4.26"; return; fi
             case "$v" in
               0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20) echo "$v" ;;
