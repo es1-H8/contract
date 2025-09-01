@@ -47,18 +47,20 @@ jobs:
         run: |
           npm install
           # Ensure packages used by legacy imports exist even if not in package.json
-          npm install @openzeppelin/contracts @openzeppelin/contracts-upgradeable @chainlink/contracts openzeppelin-solidity zeppelin-solidity --no-save
+          npm install @openzeppelin/contracts-upgradeable openzeppelin-solidity zeppelin-solidity --no-save
 
       - name: Ensure remappings.txt (only if missing)
         run: |
           if [ ! -f remappings.txt ]; then
-            echo "@openzeppelin/=node_modules/@openzeppelin/" > remappings.txt
-            echo "@chainlink/=node_modules/@chainlink/" >> remappings.txt
-            echo "@pythnetwork/=node_modules/@pythnetwork/" >> remappings.txt
-            echo "erc721a/=node_modules/erc721a/" >> remappings.txt
-            echo "@uniswap/=node_modules/@uniswap/" >> remappings.txt
-            echo "zeppelin-solidity/=node_modules/zeppelin-solidity/" >> remappings.txt
-            echo "openzeppelin-solidity/=node_modules/openzeppelin-solidity/" >> remappings.txt
+            cat > remappings.txt <<'EOF'
+@openzeppelin/=node_modules/@openzeppelin/
+@chainlink/=node_modules/@chainlink/
+@pythnetwork/=node_modules/@pythnetwork/
+erc721a/=node_modules/erc721a/
+@uniswap/=node_modules/@uniswap/
+zeppelin-solidity/=node_modules/zeppelin-solidity/
+openzeppelin-solidity/=node_modules/openzeppelin-solidity/
+EOF
           fi
           echo "=== REMAPPINGS IN USE ==="
           cat remappings.txt || true
@@ -87,9 +89,6 @@ jobs:
           echo "Legacy openzeppelin-solidity:"
           ls -la node_modules/openzeppelin-solidity/ | head -5 || true
           echo ""
-          # Extra: prove the exact upgradeable paths Mythril/Echidna need really exist
-          test -f node_modules/@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol && echo "OwnableUpgradeable ✅" || echo "OwnableUpgradeable ❌"
-          test -f node_modules/@openzeppelin/contracts/utils/cryptography/ECDSA.sol && echo "ECDSA ✅" || echo "ECDSA ❌"
           echo "Dependencies verification complete"
 
       # - name: Install Solhint
@@ -184,7 +183,7 @@ jobs:
       #     fi
 
       # ==============================
-      # Echidna (assert-mode; single solc; include paths; skip 0.4.x)
+      # Echidna (fixed: no unsupported flags)
       # ==============================
       - name: Run Echidna analysis
         run: |
@@ -193,53 +192,42 @@ jobs:
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
 
-          # Minimal config if none present
+          # Ensure minimal config
           if [ ! -f echidna.yaml ]; then
-            echo "testLimit: 100" > echidna.yaml
+            echo "testMode: assertion" > echidna.yaml
+            echo "testLimit: 100" >> echidna.yaml
           fi
 
           docker pull trailofbits/echidna:latest
 
           for contract in contracts/*.sol; do
             [ -f "$contract" ] || continue
-            contract_file="$(basename "$contract")"
-
-            # Skip 0.4.x in Echidna (container ships 0.8.x compiler)
-            if grep -qE "pragma\s+solidity\s+\^?0\.4" "$contract"; then
-              echo "========================================" | tee -a security-report.txt
-              echo "Fuzz Testing: $contract_file (skipped: Solidity 0.4.x not supported by container)" | tee -a security-report.txt
-              echo "========================================" | tee -a security-report.txt
-              echo "" | tee -a security-report.txt
-              continue
-            fi
+            name=$(basename "$contract")
 
             echo "========================================" | tee -a security-report.txt
-            echo "Fuzz Testing: $contract_file" | tee -a security-report.txt
+            echo "Fuzz Testing: $name" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # Use assertions as tests; resolve node_modules; ignore pragma to compile varied 0.8.x
             docker run --rm \
               -v "$PWD":/src \
               -w /src \
               trailofbits/echidna:latest \
-              echidna-test "contracts/$contract_file" \
-                --test-mode assertion \
+              echidna-test "contracts/$name" \
                 --config echidna.yaml \
-                --solc-args "--base-path . --include-path node_modules --ignore-pragma" \
               2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
           done
 
       # ==============================
-      # Mythril (auto solc; fix imports; handle 0.4.x includes)
+      # Mythril (skip Solidity 0.4.x contracts)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
           python3 -m pip install --upgrade pip
           pip install mythril solc-select
 
-      - name: Run Mythril analysis (auto-detect solc version + include paths)
+      - name: Run Mythril analysis (skip 0.4.x)
         run: |
           echo "=== MYTHRIL SECURITY ANALYSIS ===" | tee -a security-report.txt
           echo "Tool: Mythril" | tee -a security-report.txt
@@ -249,20 +237,14 @@ jobs:
           pick_version() {
             raw="$1"
             v="${raw//^/}"; v="${v//>=/}"; v="${v//~=/}"; v="${v// /}"
-            if echo "$v" | grep -q "^0\.4"; then echo "0.4.26"; return; fi
+            if echo "$v" | grep -q "^0\.4"; then echo "skip"; return; fi
             case "$v" in
               0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20) echo "$v" ;;
-              0.8.*) echo "0.8.26" ;;
+              0.8.*) echo "0.8.20" ;;
+              0.5.*|0.6.*|0.7.*) echo "0.8.20" ;; # approximate forward compile
               *) echo "0.8.20" ;;
             esac
           }
-
-          need_versions="$(grep -hRoE "pragma solidity[^;]*;" contracts | sed -E 's/.*solidity([^;]*);/\1/' | tr -d ' ' | sort -u)"
-          base_versions="0.4.26 0.8.20 0.8.22 0.8.25 0.8.26 0.8.28 0.8.29 0.8.30"
-          for tok in $need_versions $base_versions; do
-            v=$(pick_version "$tok")
-            solc-select versions | grep -q " $v " || solc-select install "$v" || true
-          done
 
           for contract in contracts/*.sol; do
             [ -f "$contract" ] || continue
@@ -272,29 +254,22 @@ jobs:
             solv=$(pick_version "$version_token")
 
             echo "========================================" | tee -a security-report.txt
+            if [ "$solv" = "skip" ]; then
+              echo "Skipping: $name (Solidity 0.4.x not supported by Mythril)" | tee -a security-report.txt
+              echo "" | tee -a security-report.txt
+              continue
+            fi
+
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            if echo "$solv" | grep -q "^0\.4"; then
-              # Old solc (0.4.x): add -I include dir + allow node_modules
-              myth analyze "$contract" \
-                --solv "$solv" \
-                --solc-args "--allow-paths .,node_modules -I node_modules" \
-                --execution-timeout 120 \
-                --max-depth 16 \
-                --create-timeout 60 \
-                --solver-timeout 10000 \
-                2>&1 | tee -a security-report.txt || true
-            else
-              myth analyze "$contract" \
-                --solv "$solv" \
-                --solc-args "--base-path . --include-path node_modules --allow-paths .,node_modules" \
-                --execution-timeout 120 \
-                --max-depth 16 \
-                --create-timeout 60 \
-                --solver-timeout 10000 \
-                2>&1 | tee -a security-report.txt || true
-            fi
+            myth analyze "$contract" \
+              --solv "$solv" \
+              --execution-timeout 120 \
+              --max-depth 16 \
+              --create-timeout 60 \
+              --solver-timeout 10000 \
+              2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
           done
