@@ -47,7 +47,7 @@ jobs:
         run: |
           npm install
           # Ensure packages used by legacy imports exist even if not in package.json
-          npm install @openzeppelin/contracts-upgradeable openzeppelin-solidity zeppelin-solidity --no-save
+          npm install @openzeppelin/contracts @openzeppelin/contracts-upgradeable @chainlink/contracts openzeppelin-solidity zeppelin-solidity --no-save
 
       - name: Ensure remappings.txt (only if missing)
         run: |
@@ -87,6 +87,9 @@ jobs:
           echo "Legacy openzeppelin-solidity:"
           ls -la node_modules/openzeppelin-solidity/ | head -5 || true
           echo ""
+          # Extra: prove the exact upgradeable paths Mythril/Echidna need really exist
+          test -f node_modules/@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol && echo "OwnableUpgradeable ✅" || echo "OwnableUpgradeable ❌"
+          test -f node_modules/@openzeppelin/contracts/utils/cryptography/ECDSA.sol && echo "ECDSA ✅" || echo "ECDSA ❌"
           echo "Dependencies verification complete"
 
       # - name: Install Solhint
@@ -181,7 +184,7 @@ jobs:
       #     fi
 
       # ==============================
-      # Echidna (assert-mode + per-file solc + include paths; no --contract)
+      # Echidna (assert-mode; single solc; include paths; skip 0.4.x)
       # ==============================
       - name: Run Echidna analysis
         run: |
@@ -197,31 +200,24 @@ jobs:
 
           docker pull trailofbits/echidna:latest
 
-          pick_version() {
-            raw="$1"
-            v="${raw//^/}"; v="${v//>=/}"; v="${v//~=/}"; v="${v// /}"
-            if echo "$v" | grep -q "^0\.4"; then echo "0.4.26"; return; fi
-            case "$v" in
-              0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20) echo "$v" ;;
-              0.8.*) echo "0.8.26" ;;
-              *) echo "0.8.20" ;;
-            esac
-          }
-
           for contract in contracts/*.sol; do
             [ -f "$contract" ] || continue
             contract_file="$(basename "$contract")"
 
-            # detect pragma
-            pragma_line=$(grep -m1 -E "pragma\s+solidity" "$contract" || true)
-            version_token=$(echo "$pragma_line" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
-            solv=$(pick_version "$version_token")
+            # Skip 0.4.x in Echidna (container ships 0.8.x compiler)
+            if grep -qE "pragma\s+solidity\s+\^?0\.4" "$contract"; then
+              echo "========================================" | tee -a security-report.txt
+              echo "Fuzz Testing: $contract_file (skipped: Solidity 0.4.x not supported by container)" | tee -a security-report.txt
+              echo "========================================" | tee -a security-report.txt
+              echo "" | tee -a security-report.txt
+              continue
+            fi
 
             echo "========================================" | tee -a security-report.txt
-            echo "Fuzz Testing: $contract_file (solc $solv)" | tee -a security-report.txt
+            echo "Fuzz Testing: $contract_file" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # Use assertions as tests, include node_modules for imports, and pin solc per file
+            # Use assertions as tests; resolve node_modules; ignore pragma to compile varied 0.8.x
             docker run --rm \
               -v "$PWD":/src \
               -w /src \
@@ -229,15 +225,14 @@ jobs:
               echidna-test "contracts/$contract_file" \
                 --test-mode assertion \
                 --config echidna.yaml \
-                --solc-args "--base-path . --include-path node_modules" \
-                --crytic-args "--solc-version $solv" \
+                --solc-args "--base-path . --include-path node_modules --ignore-pragma" \
               2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
           done
 
       # ==============================
-      # Mythril (auto solc; fix imports; handle 0.4.x)
+      # Mythril (auto solc; fix imports; handle 0.4.x includes)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
@@ -257,7 +252,7 @@ jobs:
             if echo "$v" | grep -q "^0\.4"; then echo "0.4.26"; return; fi
             case "$v" in
               0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20) echo "$v" ;;
-              0.8.*) echo "0.8.20" ;;
+              0.8.*) echo "0.8.26" ;;
               *) echo "0.8.20" ;;
             esac
           }
@@ -281,10 +276,10 @@ jobs:
             echo "========================================" | tee -a security-report.txt
 
             if echo "$solv" | grep -q "^0\.4"; then
-              # Old solc (0.4.x) -> allow node_modules paths instead of base-path
+              # Old solc (0.4.x): add -I include dir + allow node_modules
               myth analyze "$contract" \
                 --solv "$solv" \
-                --solc-args "--allow-paths .,node_modules" \
+                --solc-args "--allow-paths .,node_modules -I node_modules" \
                 --execution-timeout 120 \
                 --max-depth 16 \
                 --create-timeout 60 \
@@ -293,7 +288,7 @@ jobs:
             else
               myth analyze "$contract" \
                 --solv "$solv" \
-                --solc-args "--base-path . --include-path node_modules" \
+                --solc-args "--base-path . --include-path node_modules --allow-paths .,node_modules" \
                 --execution-timeout 120 \
                 --max-depth 16 \
                 --create-timeout 60 \
