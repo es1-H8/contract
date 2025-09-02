@@ -2,9 +2,9 @@ name: Smart Contract CI/CD
 
 on:
   push:
-    branches: [ main ]
+    branches: [main]
   pull_request:
-    branches: [ main ]
+    branches: [main]
 
 jobs:
   build:
@@ -22,7 +22,7 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # Temporarily skip known-problematic files for compile (edit list as needed)
+      # Temporarily skip known-problematic files for compile (no source edits)
       - name: Temporarily skip files for compile
         env:
           SKIP_FOR_COMPILE: contracts/DecentralizedInsurance.sol
@@ -113,7 +113,7 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
-    needs: [ build ]
+    needs: [build]
 
     steps:
       - name: Checkout repository
@@ -133,6 +133,7 @@ jobs:
       - name: Verify dependencies for import resolution
         run: |
           echo "=== VERIFYING DEPENDENCIES FOR IMPORT RESOLUTION ==="
+          echo "pwd:"; pwd; echo
           echo "OpenZeppelin contracts:"; ls -la node_modules/@openzeppelin/contracts/ | head -5 || true; echo
           echo "OpenZeppelin (upgradeable):"; ls -la node_modules/@openzeppelin/contracts-upgradeable/ | head -5 || true; echo
           echo "Chainlink contracts:"; ls -la node_modules/@chainlink/contracts/ | head -5 || true; echo
@@ -246,11 +247,12 @@ jobs:
       #     fi
 
       # ==============================
-      # Echidna (simple, 0.8.x only + skip list) — FIXED paths
+      # Echidna (simple, 0.8.x only; container paths)
       # ==============================
       - name: Run Echidna analysis
         env:
-          ECHIDNA_SKIP: contracts/Ai.sol,contracts/DecentralizedInsurance.sol,contracts/agent.sol
+          # Comma-separated file names to skip in Echidna (optional)
+          ECHIDNA_SKIP: Ai.sol,DecentralizedInsurance.sol,agent.sol
         run: |
           echo "=== ECHIDNA SECURITY ANALYSIS ===" | tee -a security-report.txt
           echo "Tool: Echidna (trailofbits/echidna)" | tee -a security-report.txt
@@ -263,14 +265,23 @@ jobs:
 
           docker pull trailofbits/echidna:latest
 
-          SKIP_LIST="$(echo "${ECHIDNA_SKIP:-}" | tr ',' '\n' | xargs -I{} echo "{}")"
+          IFS=',' read -ra SKIPS <<< "${ECHIDNA_SKIP:-}"
+          should_skip() {
+            local fname="$1"
+            for s in "${SKIPS[@]}"; do
+              if [ "$(echo "$s" | xargs)" = "$fname" ]; then
+                return 0
+              fi
+            done
+            return 1
+          }
 
           for contract in contracts/*.sol; do
             [ -f "$contract" ] || continue
             file="$(basename "$contract")"
             pragma=$(grep -m1 -E "pragma\s+solidity" "$contract" || true)
 
-            # Only run Echidna on 0.8.x files
+            # Skip if not 0.8.x
             if ! echo "$pragma" | grep -qE "0\.8"; then
               echo "========================================" | tee -a security-report.txt
               echo "Fuzz Testing: $file (skipped: Echidna run limited to 0.8.x)" | tee -a security-report.txt
@@ -279,8 +290,8 @@ jobs:
               continue
             fi
 
-            # Explicit skip list
-            if echo "$SKIP_LIST" | grep -qx "contracts/$file"; then
+            # Skip if explicitly listed
+            if should_skip "$file"; then
               echo "========================================" | tee -a security-report.txt
               echo "Fuzz Testing: $file (skipped by ECHIDNA_SKIP)" | tee -a security-report.txt
               echo "========================================" | tee -a security-report.txt
@@ -292,7 +303,7 @@ jobs:
             echo "Fuzz Testing: $file" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # IMPORTANT: pass container paths (/src), not host $PWD
+            # IMPORTANT: use container paths in solc args
             docker run --rm \
               -v "$PWD":/src \
               -w /src \
@@ -307,7 +318,7 @@ jobs:
           done
 
       # ==============================
-      # Mythril (skip ONLY 0.4.x; version-aware flags; RELATIVE paths)
+      # Mythril (skip ONLY 0.4.x; also skip DecentralizedInsurance.sol)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
@@ -315,11 +326,14 @@ jobs:
           pip install mythril solc-select
 
       - name: Run Mythril analysis
+        env:
+          MYTHRIL_SKIP: DecentralizedInsurance.sol
         run: |
           echo "=== MYTHRIL SECURITY ANALYSIS ===" | tee -a security-report.txt
           echo "Tool: Mythril" | tee -a security-report.txt
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
+          echo "pwd:"; pwd
 
           pick_version() {
             raw="$1"
@@ -340,6 +354,20 @@ jobs:
             solc-select versions | grep -q " $v " || solc-select install "$v" || true
           done
 
+          IFS=',' read -ra SKIPS <<< "${MYTHRIL_SKIP:-}"
+          should_skip_m() {
+            local fname="$1"
+            for s in "${SKIPS[@]}"; do
+              if [ "$(echo "$s" | xargs)" = "$fname" ]; then
+                return 0
+              fi
+            done
+            return 1
+          }
+
+          ABS="$GITHUB_WORKSPACE"
+          [ -z "$ABS" ] && ABS="$PWD"
+
           for contract in contracts/*.sol; do
             [ -f "$contract" ] || continue
             name=$(basename "$contract")
@@ -347,10 +375,19 @@ jobs:
             token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
             solv=$(pick_version "$token")
 
-            # Skip ONLY 0.4.x, with your exact message
+            # Skip ONLY 0.4.x with your exact message
             if echo "$solv" | grep -q "^0\.4"; then
               echo "========================================" | tee -a security-report.txt
               echo "Analyzing: $name (skipped: Can't compile and I use Mythril on old contracts.)" | tee -a security-report.txt
+              echo "========================================" | tee -a security-report.txt
+              echo "" | tee -a security-report.txt
+              continue
+            fi
+
+            # Skip explicit list (e.g., DecentralizedInsurance.sol)
+            if should_skip_m "$name"; then
+              echo "========================================" | tee -a security-report.txt
+              echo "Analyzing: $name (skipped by MYTHRIL_SKIP)" | tee -a security-report.txt
               echo "========================================" | tee -a security-report.txt
               echo "" | tee -a security-report.txt
               continue
@@ -360,31 +397,21 @@ jobs:
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            if echo "$solv" | grep -Eq "^0\.5\."; then
-              # 0.5.x: allow-paths only (no -I, no base-path)
-              myth analyze "contracts/$name" \
+            # 0.5/0.6: avoid -I; allow absolute paths
+            if echo "$solv" | grep -Eq "^0\.(5|6)\."; then
+              myth analyze "$contract" \
                 --solv "$solv" \
-                --solc-args "--allow-paths .,node_modules" \
-                --execution-timeout 120 \
-                --max-depth 16 \
-                --create-timeout 60 \
-                --solver-timeout 10000 \
-                2>&1 | tee -a security-report.txt || true
-            elif echo "$solv" | grep -Eq "^0\.(6|7|8)\."; then
-              # 0.6+ supports base/include
-              myth analyze "contracts/$name" \
-                --solv "$solv" \
-                --solc-args "--base-path . --include-path node_modules --allow-paths .,node_modules" \
+                --solc-args "--allow-paths $ABS,$ABS/node_modules" \
                 --execution-timeout 120 \
                 --max-depth 16 \
                 --create-timeout 60 \
                 --solver-timeout 10000 \
                 2>&1 | tee -a security-report.txt || true
             else
-              # Fallback
-              myth analyze "contracts/$name" \
+              # 0.7+/0.8.x: provide base/include/allow as ABS paths
+              myth analyze "$contract" \
                 --solv "$solv" \
-                --solc-args "--allow-paths .,node_modules" \
+                --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
                 --execution-timeout 120 \
                 --max-depth 16 \
                 --create-timeout 60 \
@@ -403,7 +430,7 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [ build, security ]
+    needs: [build, security]
     if: github.ref == 'refs/heads/main'
 
     steps:
