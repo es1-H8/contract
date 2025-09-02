@@ -397,8 +397,8 @@ jobs:
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # 0.5/0.6: avoid -I; allow absolute paths only
             if echo "$solv" | grep -Eq "^0\.(5|6)\."; then
+              # Older compilers: keep it minimal
               myth analyze "$contract" \
                 --solv "$solv" \
                 --solc-args "--allow-paths $ABS,$ABS/node_modules" \
@@ -408,10 +408,10 @@ jobs:
                 --solver-timeout 10000 \
                 2>&1 | tee -a security-report.txt || true
             else
-              # 0.7+/0.8.x: include absolute base/include/allow and ALSO -I for node_modules
+              # 0.7+/0.8.x: remove '-I', use absolute base/include/allow only
               myth analyze "$contract" \
                 --solv "$solv" \
-                --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules -I $ABS/node_modules" \
+                --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
                 --execution-timeout 120 \
                 --max-depth 16 \
                 --create-timeout 60 \
