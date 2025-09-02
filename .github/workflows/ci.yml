@@ -211,36 +211,13 @@ jobs:
       #     echo "Formatted Slither Report (Grouped by Contract)" | tee -a security-report.txt
       #     echo "----------------------------------------" | tee -a security-report.txt
       #     if [ -s raw-slither.txt ]; then
-      #       awk '
-      #         {
-      #           line = $0
-      #           while (match(line, /contracts\/([A-Za-z0-9_]+)\.sol/, m)) {
-      #             name = m[1]
-      #             if (!(name in seen)) { seen[name] = 1; order[++n] = name }
-      #             grouped[name] = grouped[name] $0 "\n"
-      #             line = substr(line, RSTART + RLENGTH)
-      #           }
-      #         }
-      #         END {
-      #           if (n == 0) {
-      #             print "No per-contract matches found; showing raw Slither output.\n"
-      #             exit 1
-      #           }
-      #           for (i = 1; i <= n; i++) {
-      #             name = order[i]
-      #             print "========================================"
-      #             print "Contract: " name
-      #             print "========================================"
-      #             printf "%s", grouped[name]
-      #             print "\n\n\n\n\n\n"
-      #           }
-      #         }' raw-slither.txt | tee -a security-report.txt || {
-      #           echo "========================================" | tee -a security-report.txt
-      #           echo "Ungrouped Slither Output" | tee -a security-report.txt
-      #           echo "========================================" | tee -a security-report.txt
-      #           cat raw-slither.txt | tee -a security-report.txt
-      #           echo "\n\n" | tee -a security-report.txt
-      #         }
+      #       awk '... (omitted for brevity) ...' raw-slither.txt | tee -a security-report.txt || {
+      #         echo "========================================" | tee -a security-report.txt
+      #         echo "Ungrouped Slither Output" | tee -a security-report.txt
+      #         echo "========================================" | tee -a security-report.txt
+      #         cat raw-slither.txt | tee -a security-report.txt
+      #         echo "\n\n" | tee -a security-report.txt
+      #       }
       #       echo "========================================" | tee -a security-report.txt
       #       echo "END OF SLITHER ANALYSIS" | tee -a security-report.txt
       #       echo "========================================" | tee -a security-report.txt
@@ -305,7 +282,7 @@ jobs:
             echo "Fuzz Testing: $file" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # IMPORTANT: use container paths in solc args
+            # Use container paths in solc args
             docker run --rm \
               -v "$PWD":/src \
               -w /src \
@@ -321,6 +298,7 @@ jobs:
 
       # ==============================
       # Mythril (skip ONLY 0.4.x; also skip DecentralizedInsurance.sol)
+      # Use relative file paths; cd into workspace; absolute base/include/allow paths
       # ==============================
       - name: Install Mythril + solc-select
         run: |
@@ -331,15 +309,20 @@ jobs:
         env:
           MYTHRIL_SKIP: DecentralizedInsurance.sol
         run: |
+          set -e
           echo "=== MYTHRIL SECURITY ANALYSIS ===" | tee -a security-report.txt
           echo "Tool: Mythril" | tee -a security-report.txt
           echo "Timestamp: $(date)" | tee -a security-report.txt
-          echo "" | tee -a security-report.txt
-          echo "pwd:"; pwd
+          echo ""
 
-          ABS="${GITHUB_WORKSPACE:-$PWD}"
+          # Always operate from the workspace root
+          cd "$GITHUB_WORKSPACE"
+          ABS="$(pwd)"
+          echo "cwd: $ABS"
+          echo "contracts present:"; ls -la "$ABS/contracts" || true
+          echo ""
 
-          # Ensure OZ Upgradeable exists (belt & suspenders)
+          # Ensure OZ Upgradeable exists
           if [ ! -f "$ABS/node_modules/@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol" ]; then
             echo "contracts-upgradeable missing; installing..."
             npm install @openzeppelin/contracts-upgradeable --no-save
@@ -401,7 +384,9 @@ jobs:
               continue
             fi
 
-            FILE_ABS="$ABS/$contract"
+            # Sanity: verify file exists where solc expects
+            echo "File check:"
+            ls -la "$ABS/contracts/$name" || true
 
             echo "========================================" | tee -a security-report.txt
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
@@ -409,7 +394,7 @@ jobs:
 
             if echo "$solv" | grep -Eq "^0\.(5|6)\."; then
               # Older compilers: minimal flags (no -I, no base-path)
-              myth analyze "$FILE_ABS" \
+              myth analyze "contracts/$name" \
                 --solv "$solv" \
                 --solc-args "--allow-paths $ABS,$ABS/node_modules" \
                 --execution-timeout 120 \
@@ -418,8 +403,8 @@ jobs:
                 --solver-timeout 10000 \
                 2>&1 | tee -a security-report.txt || true
             else
-              # 0.7+/0.8.x: absolute paths; no -I; include node_modules
-              myth analyze "$FILE_ABS" \
+              # 0.7+/0.8.x: relative path; absolute include/base/allow
+              myth analyze "contracts/$name" \
                 --solv "$solv" \
                 --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
                 --execution-timeout 120 \
