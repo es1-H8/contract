@@ -342,7 +342,7 @@ jobs:
               0.4.*) echo "0.4.26" ;;
               0.5.*) echo "0.5.17" ;;
               0.6.*) echo "0.6.12" ;;
-              0.7.*) echo "0.7.6" ;;
+              0.7.*) echo "0.7.6"  ;;
               0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20) echo "$v" ;;
               0.8.*) echo "0.8.26" ;;
               *) echo "0.8.20" ;;
@@ -397,7 +397,7 @@ jobs:
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # 0.5/0.6: avoid -I; allow absolute paths
+            # 0.5/0.6: avoid -I; allow absolute paths only
             if echo "$solv" | grep -Eq "^0\.(5|6)\."; then
               myth analyze "$contract" \
                 --solv "$solv" \
@@ -408,10 +408,10 @@ jobs:
                 --solver-timeout 10000 \
                 2>&1 | tee -a security-report.txt || true
             else
-              # 0.7+/0.8.x: provide base/include/allow as ABS paths
+              # 0.7+/0.8.x: include absolute base/include/allow and ALSO -I for node_modules
               myth analyze "$contract" \
                 --solv "$solv" \
-                --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
+                --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules -I $ABS/node_modules" \
                 --execution-timeout 120 \
                 --max-depth 16 \
                 --create-timeout 60 \
