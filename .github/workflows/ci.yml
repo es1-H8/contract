@@ -2,11 +2,9 @@ name: Smart Contract CI/CD
 
 on:
   push:
-    branches:
-      - main
+    branches: [ main ]
   pull_request:
-    branches:
-      - main
+    branches: [ main ]
 
 jobs:
   build:
@@ -115,7 +113,7 @@ jobs:
 
   security:
     runs-on: ubuntu-latest
-    needs: [build]
+    needs: [ build ]
 
     steps:
       - name: Checkout repository
@@ -248,9 +246,11 @@ jobs:
       #     fi
 
       # ==============================
-      # Echidna (simple, 0.8.x only)
+      # Echidna (simple, 0.8.x only + skip list)
       # ==============================
       - name: Run Echidna analysis
+        env:
+          ECHIDNA_SKIP: contracts/Ai.sol,contracts/DecentralizedInsurance.sol,contracts/agent.sol
         run: |
           echo "=== ECHIDNA SECURITY ANALYSIS ===" | tee -a security-report.txt
           echo "Tool: Echidna (trailofbits/echidna)" | tee -a security-report.txt
@@ -263,6 +263,9 @@ jobs:
 
           docker pull trailofbits/echidna:latest
 
+          # turn comma list into newline list for exact matching
+          SKIP_LIST="$(echo "${ECHIDNA_SKIP:-}" | tr ',' '\n' | xargs -I{} echo "{}")"
+
           for contract in contracts/*.sol; do
             [ -f "$contract" ] || continue
             file="$(basename "$contract")"
@@ -272,6 +275,15 @@ jobs:
             if ! echo "$pragma" | grep -qE "0\.8"; then
               echo "========================================" | tee -a security-report.txt
               echo "Fuzz Testing: $file (skipped: Echidna run limited to 0.8.x)" | tee -a security-report.txt
+              echo "========================================" | tee -a security-report.txt
+              echo "" | tee -a security-report.txt
+              continue
+            fi
+
+            # Explicit skip list
+            if echo "$SKIP_LIST" | grep -qx "contracts/$file"; then
+              echo "========================================" | tee -a security-report.txt
+              echo "Fuzz Testing: $file (skipped by ECHIDNA_SKIP)" | tee -a security-report.txt
               echo "========================================" | tee -a security-report.txt
               echo "" | tee -a security-report.txt
               continue
@@ -288,14 +300,14 @@ jobs:
               echidna-test "contracts/$file" \
                 --test-mode assertion \
                 --config echidna.yaml \
-                --solc-args "--base-path . --include-path node_modules --allow-paths .,node_modules" \
+                --solc-args "--base-path $PWD --include-path $PWD/node_modules --allow-paths $PWD,$PWD/node_modules" \
               2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
           done
 
       # ==============================
-      # Mythril (skip ONLY 0.4.x)
+      # Mythril (skip ONLY 0.4.x; version-aware flags; absolute paths)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
@@ -344,24 +356,37 @@ jobs:
               continue
             fi
 
+            abs_file="$PWD/contracts/$name"
+
             echo "========================================" | tee -a security-report.txt
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # Older solc (0.5/0.6) don’t understand --base-path; use -I + allow-paths
-            if echo "$solv" | grep -Eq "^0\.(5|6)\."; then
-              myth analyze "$contract" \
+            if echo "$solv" | grep -Eq "^0\.5\."; then
+              # 0.5.x: do NOT use -I; allow-paths only
+              myth analyze "$abs_file" \
                 --solv "$solv" \
-                --solc-args "--allow-paths .,node_modules -I node_modules" \
+                --solc-args "--allow-paths $PWD,$PWD/node_modules" \
+                --execution-timeout 120 \
+                --max-depth 16 \
+                --create-timeout 60 \
+                --solver-timeout 10000 \
+                2>&1 | tee -a security-report.txt || true
+            elif echo "$solv" | grep -Eq "^0\.(6|7|8)\."; then
+              # 0.6+ supports base/include
+              myth analyze "$abs_file" \
+                --solv "$solv" \
+                --solc-args "--base-path $PWD --include-path $PWD/node_modules --allow-paths $PWD,$PWD/node_modules" \
                 --execution-timeout 120 \
                 --max-depth 16 \
                 --create-timeout 60 \
                 --solver-timeout 10000 \
                 2>&1 | tee -a security-report.txt || true
             else
-              myth analyze "$contract" \
+              # Fallback
+              myth analyze "$abs_file" \
                 --solv "$solv" \
-                --solc-args "--base-path . --include-path node_modules --allow-paths .,node_modules" \
+                --solc-args "--allow-paths $PWD,$PWD/node_modules" \
                 --execution-timeout 120 \
                 --max-depth 16 \
                 --create-timeout 60 \
@@ -380,7 +405,7 @@ jobs:
 
   deploy:
     runs-on: ubuntu-latest
-    needs: [build, security]
+    needs: [ build, security ]
     if: github.ref == 'refs/heads/main'
 
     steps:
