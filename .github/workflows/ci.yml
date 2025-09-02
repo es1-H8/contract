@@ -141,6 +141,8 @@ jobs:
           echo "ERC721A:"; ls -la node_modules/erc721a/ | head -5 || true; echo
           echo "Legacy zeppelin-solidity:"; ls -la node_modules/zeppelin-solidity/ | head -5 || true; echo
           echo "Legacy openzeppelin-solidity:"; ls -la node_modules/openzeppelin-solidity/ | head -5 || true; echo
+          # Critical upgrades sanity check:
+          test -f node_modules/@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol && echo "OwnableUpgradeable ✅" || (echo "OwnableUpgradeable ❌" && exit 1)
           echo "Dependencies verification complete"
 
       # -------------------------
@@ -335,6 +337,15 @@ jobs:
           echo "" | tee -a security-report.txt
           echo "pwd:"; pwd
 
+          ABS="${GITHUB_WORKSPACE:-$PWD}"
+
+          # Ensure OZ Upgradeable exists (belt & suspenders)
+          if [ ! -f "$ABS/node_modules/@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol" ]; then
+            echo "contracts-upgradeable missing; installing..."
+            npm install @openzeppelin/contracts-upgradeable --no-save
+            test -f "$ABS/node_modules/@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol" || { echo "Still missing OwnableUpgradeable.sol"; exit 1; }
+          fi
+
           pick_version() {
             raw="$1"
             v="${raw//^/}"; v="${v//>=/}"; v="${v//~=/}"; v="${v// /}"
@@ -365,9 +376,6 @@ jobs:
             return 1
           }
 
-          ABS="$GITHUB_WORKSPACE"
-          [ -z "$ABS" ] && ABS="$PWD"
-
           for contract in contracts/*.sol; do
             [ -f "$contract" ] || continue
             name=$(basename "$contract")
@@ -393,13 +401,15 @@ jobs:
               continue
             fi
 
+            FILE_ABS="$ABS/$contract"
+
             echo "========================================" | tee -a security-report.txt
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
             if echo "$solv" | grep -Eq "^0\.(5|6)\."; then
-              # Older compilers: keep it minimal
-              myth analyze "$contract" \
+              # Older compilers: minimal flags (no -I, no base-path)
+              myth analyze "$FILE_ABS" \
                 --solv "$solv" \
                 --solc-args "--allow-paths $ABS,$ABS/node_modules" \
                 --execution-timeout 120 \
@@ -408,8 +418,8 @@ jobs:
                 --solver-timeout 10000 \
                 2>&1 | tee -a security-report.txt || true
             else
-              # 0.7+/0.8.x: remove '-I', use absolute base/include/allow only
-              myth analyze "$contract" \
+              # 0.7+/0.8.x: absolute paths; no -I; include node_modules
+              myth analyze "$FILE_ABS" \
                 --solv "$solv" \
                 --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
                 --execution-timeout 120 \
