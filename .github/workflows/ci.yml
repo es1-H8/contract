@@ -246,7 +246,7 @@ jobs:
       #     fi
 
       # ==============================
-      # Echidna (simple, 0.8.x only + skip list)
+      # Echidna (simple, 0.8.x only + skip list) — FIXED paths
       # ==============================
       - name: Run Echidna analysis
         env:
@@ -263,7 +263,6 @@ jobs:
 
           docker pull trailofbits/echidna:latest
 
-          # turn comma list into newline list for exact matching
           SKIP_LIST="$(echo "${ECHIDNA_SKIP:-}" | tr ',' '\n' | xargs -I{} echo "{}")"
 
           for contract in contracts/*.sol; do
@@ -293,6 +292,7 @@ jobs:
             echo "Fuzz Testing: $file" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
+            # IMPORTANT: pass container paths (/src), not host $PWD
             docker run --rm \
               -v "$PWD":/src \
               -w /src \
@@ -300,14 +300,14 @@ jobs:
               echidna-test "contracts/$file" \
                 --test-mode assertion \
                 --config echidna.yaml \
-                --solc-args "--base-path $PWD --include-path $PWD/node_modules --allow-paths $PWD,$PWD/node_modules" \
+                --solc-args "--base-path /src --include-path /src/node_modules --allow-paths /src,/src/node_modules" \
               2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
           done
 
       # ==============================
-      # Mythril (skip ONLY 0.4.x; version-aware flags; absolute paths)
+      # Mythril (skip ONLY 0.4.x; version-aware flags; RELATIVE paths)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
@@ -356,17 +356,15 @@ jobs:
               continue
             fi
 
-            abs_file="$PWD/contracts/$name"
-
             echo "========================================" | tee -a security-report.txt
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
             if echo "$solv" | grep -Eq "^0\.5\."; then
-              # 0.5.x: do NOT use -I; allow-paths only
-              myth analyze "$abs_file" \
+              # 0.5.x: allow-paths only (no -I, no base-path)
+              myth analyze "contracts/$name" \
                 --solv "$solv" \
-                --solc-args "--allow-paths $PWD,$PWD/node_modules" \
+                --solc-args "--allow-paths .,node_modules" \
                 --execution-timeout 120 \
                 --max-depth 16 \
                 --create-timeout 60 \
@@ -374,9 +372,9 @@ jobs:
                 2>&1 | tee -a security-report.txt || true
             elif echo "$solv" | grep -Eq "^0\.(6|7|8)\."; then
               # 0.6+ supports base/include
-              myth analyze "$abs_file" \
+              myth analyze "contracts/$name" \
                 --solv "$solv" \
-                --solc-args "--base-path $PWD --include-path $PWD/node_modules --allow-paths $PWD,$PWD/node_modules" \
+                --solc-args "--base-path . --include-path node_modules --allow-paths .,node_modules" \
                 --execution-timeout 120 \
                 --max-depth 16 \
                 --create-timeout 60 \
@@ -384,9 +382,9 @@ jobs:
                 2>&1 | tee -a security-report.txt || true
             else
               # Fallback
-              myth analyze "$abs_file" \
+              myth analyze "contracts/$name" \
                 --solv "$solv" \
-                --solc-args "--allow-paths $PWD,$PWD/node_modules" \
+                --solc-args "--allow-paths .,node_modules" \
                 --execution-timeout 120 \
                 --max-depth 16 \
                 --create-timeout 60 \
