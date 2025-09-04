@@ -167,7 +167,7 @@ jobs:
             token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
             SOLV=$(pick_version "$token")
 
-            # Only fuzz 0.8.x (your previous policy)
+            # Only fuzz 0.8.x (policy kept)
             if ! echo "$pragma" | grep -qE "0\.8"; then
               echo "========================================" | tee -a security-report.txt
               echo "Fuzz Testing: $file (skipped: Echidna run limited to 0.8.x)" | tee -a security-report.txt
@@ -189,7 +189,7 @@ jobs:
                 solc-select install $SOLV || true
                 solc-select use $SOLV
                 echidna --version
-                # Use legacy entrypoint to avoid 'test' target confusion
+                # Use legacy entrypoint to avoid 'Compiling `test`' target confusion
                 echidna-test /src/contracts/$file \
                   --contract $name \
                   --test-mode assertion \
@@ -201,12 +201,16 @@ jobs:
           done
 
       # ==============================
-      # Mythril (branch solc args by version; extra include paths for OZ-Upgradeable/Chainlink)
+      # Mythril (branch solc args by version; explicit include paths)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
           python3 -m pip install --upgrade pip
           pip install mythril solc-select
+          # Pre-install a set of common solc versions (idempotent; don't query 'versions')
+          for v in 0.4.26 0.5.17 0.6.12 0.7.6 0.8.19 0.8.20 0.8.26 0.8.30; do
+            solc-select install -f "$v" || true
+          done
 
       - name: Run Mythril analysis
         run: |
@@ -235,19 +239,26 @@ jobs:
             esac
           }
 
-          for v in 0.4.26 0.5.17 0.6.12 0.7.6 0.8.19 0.8.20 0.8.26 0.8.30; do
-            solc-select versions | grep -q " $v " || solc-select install "$v" || true
-          done
-
           shopt -s nullglob
           for contract in contracts/*.sol; do
             name=$(basename "$contract")
             pragma=$(grep -m1 -E "pragma\\s+solidity" "$contract" || true)
             token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
-            solv=$(pick_version("$token"))
+            solv=$(pick_version "$token")   # fixed bash syntax
 
-            # Build solc-args per version: 0.6+ supports base/include; 0.4/0.5 do not.
-            if echo "$solv" | grep -Eq '^0\.[46-9]\.'; then
+            # Skip 0.4.x per policy
+            if echo "$solv" | grep -q '^0\.4'; then
+              echo "========================================" | tee -a security-report.txt
+              echo "Analyzing: $name (skipped: Can't compile and I use Mythril on old contracts.)" | tee -a security-report.txt
+              echo "========================================" | tee -a security-report.txt
+              echo "" | tee -a security-report.txt
+              continue
+            fi
+
+            # Build solc-args:
+            # - 0.6+ supports --base-path/--include-path
+            # - 0.5.x does NOT; only use --allow-paths
+            if echo "$solv" | grep -Eq '^0\.[6-9]\.'; then
               SOLC_ARGS="--base-path $ABS \
                 --include-path $ABS/node_modules \
                 --include-path $ABS/node_modules/@openzeppelin \
@@ -257,17 +268,12 @@ jobs:
               SOLC_ARGS="--allow-paths $ABS,$ABS/node_modules"
             fi
 
-            if echo "$solv" | grep -q '^0\.4'; then
-              echo "========================================" | tee -a security-report.txt
-              echo "Analyzing: $name (skipped: Can't compile and I use Mythril on old contracts.)" | tee -a security-report.txt
-              echo "========================================" | tee -a security-report.txt
-              echo "" | tee -a security-report.txt
-              continue
-            fi
-
             echo "========================================" | tee -a security-report.txt
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
+
+            # Ensure the chosen compiler is active
+            solc-select use "$solv"
 
             myth analyze "contracts/$name" \
               --solv "$solv" \
