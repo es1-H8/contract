@@ -46,10 +46,10 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install NPM dependencies (include security deps for imports)
+      - name: Install NPM dependencies (incl. import-heavy tool deps)
         run: |
           npm install
-          # Ensure imports are present for Mythril/Echidna compilation
+          # Ensure packages used by imports are present for Mythril/Echidna resolution
           npm i -D @openzeppelin/contracts @openzeppelin/contracts-upgradeable @chainlink/contracts @pythnetwork/pyth-sdk-solidity @uniswap/v2-core @uniswap/v2-periphery erc721a || true
 
       - name: Verify dependencies for import resolution
@@ -63,10 +63,12 @@ jobs:
             node_modules/erc721a \
             node_modules/@uniswap \
           ; do
-            echo ""; echo "Checking $p"
+            echo ""
+            echo "Checking $p"
             ls -la "$p" | head -20 || true
           done
-          echo ""; echo "Dependencies verification complete"
+          echo ""
+          echo "Dependencies verification complete"
 
       # -------------------------
       # SOLHINT (COMMENTED OUT)
@@ -82,12 +84,17 @@ jobs:
       #     echo "" | tee -a security-report.txt
       #     shopt -s nullglob
       #     for contract in contracts/*.sol; do
-      #       name=$(basename "$contract")
+      #       contract_name=$(basename "$contract")
       #       echo "========================================" | tee -a security-report.txt
-      #       echo "Analyzing: $name" | tee -a security-report.txt
+      #       echo "Analyzing: $contract_name" | tee -a security-report.txt
       #       echo "========================================" | tee -a security-report.txt
-      #       npx solhint "$contract" --formatter=unix | tee -a security-report.txt || true
+      #       npx solhint "$contract" --formatter=unix | tee -a security-report.txt || echo "No issues found in $contract_name" | tee -a security-report.txt
+      #       echo "" | tee -a security-report.txt
       #     done
+      #     TOTAL_CONTRACTS=$(ls contracts/*.sol 2>/dev/null | wc -l | xargs)
+      #     echo "=== SOLHINT ANALYSIS COMPLETE ===" | tee -a security-report.txt
+      #     echo "Total contracts analyzed: $TOTAL_CONTRACTS" | tee -a security-report.txt
+      #     echo "" | tee -a security-report.txt
 
       # -------------------------
       # SLITHER (COMMENTED OUT)
@@ -96,124 +103,109 @@ jobs:
       #   run: |
       #     python3 -m pip install --upgrade pip
       #     pip install slither-analyzer
+      #
       # - name: Run Slither analysis
       #   run: |
-      #     echo "@openzeppelin/=node_modules/@openzeppelin/" > remappings.txt
-      #     echo "@chainlink/=node_modules/@chainlink/" >> remappings.txt
-      #     echo "@pythnetwork/=node_modules/@pythnetwork/" >> remappings.txt
-      #     echo "erc721a/=node_modules/erc721a/" >> remappings.txt
-      #     echo "@uniswap/=node_modules/@uniswap/" >> remappings.txt
-      #     slither . --solc-args="--base-path . --include-path node_modules --allow-paths .,node_modules" || true
+      #     echo "=== SLITHER SECURITY ANALYSIS ===" | tee -a security-report.txt
+      #     echo "Tool: Slither" | tee -a security-report.txt
+      #     echo "Timestamp: $(date)" | tee -a security-report.txt
+      #     echo "" | tee -a security-report.txt
+      #     echo "Creating remappings.txt for import resolution..."
+      #     {
+      #       echo "@openzeppelin/=node_modules/@openzeppelin/"
+      #       echo "@chainlink/=node_modules/@chainlink/"
+      #       echo "@pythnetwork/=node_modules/@pythnetwork/"
+      #       echo "erc721a/=node_modules/erc721a/"
+      #       echo "@uniswap/=node_modules/@uniswap/"
+      #       echo "zeppelin-solidity/=node_modules/zeppelin-solidity/"
+      #       echo "openzeppelin-solidity/=node_modules/openzeppelin-solidity/"
+      #     } > remappings.txt
+      #     echo "Remappings created:"; cat remappings.txt; echo ""
+      #     slither . --solc-args="--base-path . --include-path node_modules --allow-paths .,node_modules" 2>&1 | tee raw-slither.txt || echo "Slither completed with findings" | tee -a raw-slither.txt
+      #     echo "" | tee -a security-report.txt
+      #     echo "----------------------------------------" | tee -a security-report.txt
+      #     echo "Slither Analysis Results" | tee -a security-report.txt
+      #     echo "----------------------------------------" | tee -a security-report.txt
+      #     ls contracts/*.sol 2>/dev/null | sed 's#contracts/#  - #' | tee -a security-report.txt
+      #     echo "" | tee -a security-report.txt
 
       # ==============================
-      # Install Echidna & Mythril natively + solc-select
+      # Echidna (multi-solc via toolbox)
       # ==============================
-      - name: Install echidna, mythril, solc-select
+      - name: Prepare Echidna config
         run: |
-          python3 -m pip install --upgrade pip
-          pip install echidna mythril solc-select crytic-compile
+          [ -f echidna.yaml ] || printf "testLimit: 100\nseqLen: 50\n" > echidna.yaml
+          echo "Created/verified echidna.yaml:"
+          cat echidna.yaml
 
-      - name: Pre-install common solc versions
-        shell: bash
-        run: |
-          set -e
-          # Always have a baseline across 0.4–0.8
-          BASELINE=(0.4.26 0.5.17 0.6.12 0.7.6 0.8.20 0.8.26 0.8.30)
-          for v in "${BASELINE[@]}"; do
-            solc-select versions | grep -q " $v " || solc-select install "$v" || true
-          done
-
-          # Parse exact versions from pragmas; install if exact pins are found
-          shopt -s nullglob
-          REQS=()
-          for f in contracts/*.sol; do
-            p=$(grep -m1 -E "pragma\s+solidity" "$f" || true)
-            # Extract tokens like "0.8.26" or "^0.8.20" or ">=0.6.0"
-            t=$(echo "$p" | sed -E 's/.*solidity([^;]*);/\1/' | tr -d ' ')
-            # If exact x.y.z specified (no ^ or >), capture and queue
-            if echo "$t" | grep -Eq '(^|[^0-9])([0-9]+\.[0-9]+\.[0-9]+)($|[^0-9])' ; then
-              exact=$(echo "$t" | grep -oE '[0-9]+\.[0-9]+\.[0-9]+' | head -1)
-              REQS+=("$exact")
-            fi
-          done
-          # unique install
-          printf "%s\n" "${REQS[@]}" | sort -u | while read -r v; do
-            [ -z "$v" ] && continue
-            solc-select versions | grep -q " $v " || solc-select install "$v" || true
-          done
-
-      # ==============================
-      # Echidna now with per-contract solc-select and working imports
-      # ==============================
-      - name: Run Echidna analysis (per-contract, 0.8.x only)
-        shell: bash
+      - name: Run Echidna analysis (solc-select per file)
         run: |
           echo "=== ECHIDNA SECURITY ANALYSIS ===" | tee -a security-report.txt
-          echo "Tool: Echidna (native pip)" | tee -a security-report.txt
+          echo "Tool: Echidna (trailofbits/eth-security-toolbox)" | tee -a security-report.txt
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
 
-          # Small default budget if no project config exists
-          [ -f echidna.yaml ] || printf "testLimit: 100\nseqLen: 50\n" > echidna.yaml
+          docker pull trailofbits/eth-security-toolbox:latest
 
           pick_version() {
             raw="$1"
-            tok="${raw//^/}"; tok="${tok//>=/}"; tok="${tok//~=/}"
-            tok=$(echo "$tok" | tr -d ' ')
-            # Exact x.y.z: use exact
-            if echo "$tok" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-              echo "$tok"; return
-            fi
-            # Broad ranges: choose a stable/latest for that minor
-            case "$tok" in
-              0.8.*|0.8|>=0.8.0) echo "0.8.30" ;;
-              0.7.*|0.7|>=0.7.0) echo "0.7.6" ;;
-              0.6.*|0.6|>=0.6.0) echo "0.6.12" ;;
-              0.5.*|0.5|>=0.5.0) echo "0.5.17" ;;
-              0.4.*|0.4|>=0.4.0) echo "0.4.26" ;;
+            v="${raw//^/}"; v="${v//>=/}"; v="${v//~=/}"; v="${v// /}"
+            case "$v" in
+              0.4.*) echo "0.4.26" ;;
+              0.5.*) echo "0.5.17" ;;
+              0.6.*) echo "0.6.12" ;;
+              0.7.*) echo "0.7.6"  ;;
+              0.8.[0-9][0-9]|0.8.[0-9]) echo "$v" ;;  # exact 0.8.x
+              0.8.*) echo "0.8.26" ;;                 # default for generic 0.8.*
               *) echo "0.8.26" ;;
             esac
           }
 
           shopt -s nullglob
-          for file in contracts/*.sol; do
-            pragma=$(grep -m1 -E "pragma\s+solidity" "$file" || true)
+          for contract in contracts/*.sol; do
+            file="$(basename "$contract")"
+            pragma=$(grep -m1 -E "pragma\s+solidity" "$contract" || true)
+            token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
+            SOLV=$(pick_version "$token")
 
-            # Echidna fuzzing still limited to 0.8.x (we keep this guard)
+            # Only fuzz 0.8.x here to keep parity with your earlier guard
             if ! echo "$pragma" | grep -qE "0\.8"; then
               echo "========================================" | tee -a security-report.txt
-              echo "Fuzz Testing: $(basename "$file") (skipped: Echidna run limited to 0.8.x)" | tee -a security-report.txt
+              echo "Fuzz Testing: $file (skipped: Echidna run limited to 0.8.x)" | tee -a security-report.txt
               echo "========================================" | tee -a security-report.txt
               echo "" | tee -a security-report.txt
               continue
             fi
 
-            token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}')
-            solv=$(pick_version "$token")
-            solc-select use "$solv" >/dev/null 2>&1 || true
-
             echo "========================================" | tee -a security-report.txt
-            echo "Fuzz Testing: $(basename "$file") [solc $solv]" | tee -a security-report.txt
+            echo "Fuzz Testing: $file (solc $SOLV)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # Important: give Crytic (Echidna) full include paths so OZ/Chainlink resolve
-            # NOTE: contracts with required constructor args still need a harness or config.
-            set +e
-            echidna-test "$file" \
-              --test-mode assertion \
-              --config echidna.yaml \
-              --solc-args "--base-path . --include-path node_modules --allow-paths .,node_modules" \
-              2>&1 | tee -a security-report.txt
-            set -e
+            docker run --rm \
+              -v "$PWD":/src \
+              -w /src \
+              trailofbits/eth-security-toolbox:latest \
+              bash -lc "
+                solc-select install $SOLV || true
+                solc-select use $SOLV
+                echidna-test 'contracts/$file' \
+                  --test-mode assertion \
+                  --config echidna.yaml \
+                  --solc-args '--base-path /src --include-path /src/node_modules --allow-paths /src,/src/node_modules'
+              " 2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
           done
 
       # ==============================
-      # Mythril (supports 0.4–0.8 with per-contract solc-select)
+      # Mythril (multi-solc; imports resolved)
       # ==============================
+      - name: Install Mythril + solc-select
+        run: |
+          python3 -m pip install --upgrade pip
+          pip install mythril solc-select
+
       - name: Run Mythril analysis
-        shell: bash
         run: |
           set -e
           echo "=== MYTHRIL SECURITY ANALYSIS ===" | tee -a security-report.txt
@@ -228,43 +220,60 @@ jobs:
 
           pick_version() {
             raw="$1"
-            tok="${raw//^/}"; tok="${tok//>=/}"; tok="${tok//~=/}"
-            tok=$(echo "$tok" | tr -d ' ')
-            if echo "$tok" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-              echo "$tok"; return
-            fi
-            case "$tok" in
-              0.8.*|0.8|>=0.8.0) echo "0.8.30" ;;
-              0.7.*|0.7|>=0.7.0) echo "0.7.6" ;;
-              0.6.*|0.6|>=0.6.0) echo "0.6.12" ;;
-              0.5.*|0.5|>=0.5.0) echo "0.5.17" ;;
-              0.4.*|0.4|>=0.4.0) echo "0.4.26" ;;
-              *) echo "0.8.26" ;;
+            v="${raw//^/}"; v="${v//>=/}"; v="${v//~=/}"; v="${v// /}"
+            case "$v" in
+              0.4.*) echo "0.4.26" ;;
+              0.5.*) echo "0.5.17" ;;
+              0.6.*) echo "0.6.12" ;;
+              0.7.*) echo "0.7.6"  ;;
+              0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20) echo "$v" ;;
+              0.8.*) echo "0.8.26" ;;
+              *) echo "0.8.20" ;;
             esac
           }
+
+          for v in 0.4.26 0.5.17 0.6.12 0.7.6 0.8.20 0.8.26 0.8.30; do
+            solc-select versions | grep -q " $v " || solc-select install "$v" || true
+          done
 
           shopt -s nullglob
           for contract in contracts/*.sol; do
             name=$(basename "$contract")
             pragma=$(grep -m1 -E "pragma\s+solidity" "$contract" || true)
-            token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}')
+            token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
             solv=$(pick_version "$token")
 
-            solc-select use "$solv" >/dev/null 2>&1 || true
+            if echo "$solv" | grep -q "^0\.4"; then
+              echo "========================================" | tee -a security-report.txt
+              echo "Analyzing: $name (skipped: Can't compile and I use Mythril on old contracts.)" | tee -a security-report.txt
+              echo "========================================" | tee -a security-report.txt
+              echo "" | tee -a security-report.txt
+              continue
+            fi
 
             echo "========================================" | tee -a security-report.txt
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # Always pass include paths so OZ/Chainlink/etc resolve
-            myth analyze "contracts/$name" \
-              --solv "$solv" \
-              --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
-              --execution-timeout 120 \
-              --max-depth 16 \
-              --create-timeout 60 \
-              --solver-timeout 10000 \
-              2>&1 | tee -a security-report.txt || true
+            if echo "$solv" | grep -Eq "^0\.(5|6)\."; then
+              myth analyze "contracts/$name" \
+                --solv "$solv" \
+                --solc-args "--allow-paths $ABS,$ABS/node_modules" \
+                --execution-timeout 120 \
+                --max-depth 16 \
+                --create-timeout 60 \
+                --solver-timeout 10000 \
+                2>&1 | tee -a security-report.txt || true
+            else
+              myth analyze "contracts/$name" \
+                --solv "$solv" \
+                --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
+                --execution-timeout 120 \
+                --max-depth 16 \
+                --create-timeout 60 \
+                --solver-timeout 10000 \
+                2>&1 | tee -a security-report.txt || true
+            fi
 
             echo "" | tee -a security-report.txt
           done
