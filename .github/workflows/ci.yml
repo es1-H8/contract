@@ -122,15 +122,14 @@ jobs:
       #     slither . --solc-args="--base-path . --include-path node_modules --allow-paths .,node_modules" 2>&1 | tee raw-slither.txt || echo "Slither completed with findings" | tee -a raw-slither.txt
 
       # ==============================
-      # Echidna (v2 CLI + per-file solc-select + remaps)
+      # Echidna (v2 CLI; project root; per-file solc-select)
       # ==============================
       - name: Prepare Echidna config
         run: |
           [ -f echidna.yaml ] || printf "testLimit: 100\nseqLen: 50\n" > echidna.yaml
-          echo "Created/verified echidna.yaml:"
-          cat echidna.yaml
+          echo "Created/verified echidna.yaml:"; cat echidna.yaml
 
-      - name: Run Echidna analysis (v2 CLI, solc-select per file)
+      - name: Run Echidna analysis (project-root target, per-file solc)
         run: |
           echo "=== ECHIDNA SECURITY ANALYSIS ===" | tee -a security-report.txt
           echo "Tool: Echidna (trailofbits/eth-security-toolbox)" | tee -a security-report.txt
@@ -156,11 +155,12 @@ jobs:
           shopt -s nullglob
           for contract in contracts/*.sol; do
             file="$(basename "$contract")"
+            name="${file%.sol}"
             pragma=$(grep -m1 -E "pragma\s+solidity" "$contract" || true)
             token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
             SOLV=$(pick_version "$token")
 
-            # Keep your original guard: fuzz only 0.8.x
+            # Keep your guard: only fuzz 0.8.x
             if ! echo "$pragma" | grep -qE "0\.8"; then
               echo "========================================" | tee -a security-report.txt
               echo "Fuzz Testing: $file (skipped: Echidna run limited to 0.8.x)" | tee -a security-report.txt
@@ -182,7 +182,9 @@ jobs:
                 solc-select install $SOLV || true
                 solc-select use $SOLV
                 echidna --version
-                echidna test 'contracts/$file' \
+                # IMPORTANT: target is the project root '.', not a single file.
+                echidna test . \
+                  --contract $name \
                   --test-mode assertion \
                   --config echidna.yaml \
                   --solc-args '--base-path /src --include-path /src/node_modules --allow-paths /src,/src/node_modules @openzeppelin/contracts-upgradeable=/src/node_modules/@openzeppelin/contracts-upgradeable/contracts @chainlink/contracts=/src/node_modules/@chainlink/contracts/src'
@@ -192,12 +194,28 @@ jobs:
           done
 
       # ==============================
-      # Mythril (multi-solc + remaps)
+      # Mythril (Standard JSON; remaps via settings JSON)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
           python3 -m pip install --upgrade pip
           pip install mythril solc-select
+
+      - name: Create solc.settings.json for Mythril
+        run: |
+          cat > solc.settings.json << 'JSON'
+          {
+            "remappings": [
+              "@openzeppelin/=/home/runner/work/${{ github.repository }}/node_modules/@openzeppelin/",
+              "@chainlink/=/home/runner/work/${{ github.repository }}/node_modules/@chainlink/",
+              "@pythnetwork/=/home/runner/work/${{ github.repository }}/node_modules/@pythnetwork/",
+              "erc721a/=/home/runner/work/${{ github.repository }}/node_modules/erc721a/",
+              "@uniswap/=/home/runner/work/${{ github.repository }}/node_modules/@uniswap/"
+            ]
+          }
+          JSON
+          echo "Wrote solc.settings.json:"
+          cat solc.settings.json
 
       - name: Run Mythril analysis
         run: |
@@ -233,11 +251,11 @@ jobs:
           shopt -s nullglob
           for contract in contracts/*.sol; do
             name=$(basename "$contract")
-            pragma=$(grep -m1 -E "pragma\s+solidity" "$contract" || true)
+            pragma=$(grep -m1 -E "pragma\\s+solidity" "$contract" || true)
             token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
             solv=$(pick_version "$token")
 
-            if echo "$solv" | grep -q "^0\.4"; then
+            if echo "$solv" | grep -q "^0\\.4"; then
               echo "========================================" | tee -a security-report.txt
               echo "Analyzing: $name (skipped: Can't compile and I use Mythril on old contracts.)" | tee -a security-report.txt
               echo "========================================" | tee -a security-report.txt
@@ -249,28 +267,15 @@ jobs:
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # Add remaps so OZ Upgradeable & Chainlink resolve under node_modules
-            EXTRA_ARGS="--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules @openzeppelin/contracts-upgradeable=$ABS/node_modules/@openzeppelin/contracts-upgradeable/contracts @chainlink/contracts=$ABS/node_modules/@chainlink/contracts/src"
-
-            if echo "$solv" | grep -Eq "^0\.(5|6)\."; then
-              myth analyze "contracts/$name" \
-                --solv "$solv" \
-                --solc-args "--allow-paths $ABS,$ABS/node_modules" \
-                --execution-timeout 120 \
-                --max-depth 16 \
-                --create-timeout 60 \
-                --solver-timeout 10000 \
-                2>&1 | tee -a security-report.txt || true
-            else
-              myth analyze "contracts/$name" \
-                --solv "$solv" \
-                --solc-args "$EXTRA_ARGS" \
-                --execution-timeout 120 \
-                --max-depth 16 \
-                --create-timeout 60 \
-                --solver-timeout 10000 \
-                2>&1 | tee -a security-report.txt || true
-            fi
+            # Mythril in Standard JSON mode: pass remappings via --solc-settings-json
+            myth analyze "contracts/$name" \
+              --solv "$solv" \
+              --solc-settings-json "$(cat solc.settings.json)" \
+              --execution-timeout 120 \
+              --max-depth 16 \
+              --create-timeout 60 \
+              --solver-timeout 10000 \
+              2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
           done
