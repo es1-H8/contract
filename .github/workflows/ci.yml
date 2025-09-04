@@ -122,35 +122,14 @@ jobs:
       #     slither . --solc-args="--base-path . --include-path node_modules --allow-paths .,node_modules" 2>&1 | tee raw-slither.txt || echo "Slither completed with findings" | tee -a raw-slither.txt
 
       # ==============================
-      # Echidna (v2 CLI; project root; Hardhat driver via crytic.json)
+      # Echidna (v2 CLI; compile with solc inside container; absolute target)
       # ==============================
-      - name: Create crytic.json for Echidna/crytic-compile
-        run: |
-          cat > crytic.json << 'JSON'
-          {
-            "compile": {
-              "type": "hardhat"
-            },
-            "settings": {
-              "remappings": [
-                "@openzeppelin/=node_modules/@openzeppelin/",
-                "@chainlink/=node_modules/@chainlink/",
-                "@pythnetwork/=node_modules/@pythnetwork/",
-                "erc721a/=node_modules/erc721a/",
-                "@uniswap/=node_modules/@uniswap/"
-              ]
-            }
-          }
-          JSON
-          echo "Wrote crytic.json:"
-          cat crytic.json
-
       - name: Prepare Echidna config
         run: |
           [ -f echidna.yaml ] || printf "testLimit: 100\nseqLen: 50\n" > echidna.yaml
           echo "Created/verified echidna.yaml:"; cat echidna.yaml
 
-      - name: Run Echidna analysis (project-root target, per-file solc)
+      - name: Run Echidna analysis (per-file solc-select; target=/src)
         run: |
           echo "=== ECHIDNA SECURITY ANALYSIS ===" | tee -a security-report.txt
           echo "Tool: Echidna (trailofbits/eth-security-toolbox)" | tee -a security-report.txt
@@ -181,7 +160,7 @@ jobs:
             token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
             SOLV=$(pick_version "$token")
 
-            # Keep your guard: only fuzz 0.8.x
+            # Only fuzz 0.8.x
             if ! echo "$pragma" | grep -qE "0\.8"; then
               echo "========================================" | tee -a security-report.txt
               echo "Fuzz Testing: $file (skipped: Echidna run limited to 0.8.x)" | tee -a security-report.txt
@@ -203,18 +182,19 @@ jobs:
                 solc-select install $SOLV || true
                 solc-select use $SOLV
                 echidna --version
-                # Target the project root '.'; --contract selects the artifact to fuzz
-                echidna test . \
+                # compile with solc (no hardhat); absolute target path
+                echidna test /src \
                   --contract $name \
                   --test-mode assertion \
-                  --config echidna.yaml
+                  --config echidna.yaml \
+                  --solc-args '--base-path /src --include-path /src/node_modules --allow-paths /src,/src/node_modules'
               " 2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
           done
 
       # ==============================
-      # Mythril (Standard JSON; no remaps on CLI; rely on include-path)
+      # Mythril (Standard JSON; rely on include-paths; no --solc-settings-json)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
@@ -271,8 +251,6 @@ jobs:
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # NOTE: no remaps on CLI (Mythril Standard JSON forbids them).
-            # Include/allow paths are sufficient for @openzeppelin and @chainlink under node_modules.
             myth analyze "contracts/$name" \
               --solv "$solv" \
               --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
@@ -294,7 +272,7 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     needs: [build, security]
-    if: github.ref == 'refs/heads/main]
+    if: github.ref == 'refs/heads/main'
 
     steps:
       - name: Checkout repository
