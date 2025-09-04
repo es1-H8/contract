@@ -22,34 +22,6 @@ jobs:
       - name: Install dependencies
         run: npm install
 
-      # Temporarily skip known-problematic files for compile (no source edits)
-      - name: Temporarily skip files for compile
-        env:
-          SKIP_FOR_COMPILE: contracts/DecentralizedInsurance.sol
-        run: |
-          set -e
-          SKIP_DIR=".ci_skipped_compile"
-          mkdir -p "$SKIP_DIR"
-
-          if [ -n "$SKIP_FOR_COMPILE" ]; then
-            echo "=== Will skip for compile (temporary): $SKIP_FOR_COMPILE ==="
-            IFS=',' read -ra FILES <<< "$SKIP_FOR_COMPILE"
-            for f in "${FILES[@]}"; do
-              f_trimmed="$(echo "$f" | xargs)"
-              if [ -f "$f_trimmed" ]; then
-                echo "Skipping $f_trimmed -> $SKIP_DIR/$(basename "$f_trimmed")"
-                mv "$f_trimmed" "$SKIP_DIR/$(basename "$f_trimmed")"
-              else
-                echo "Skip target not found (ignored): $f_trimmed"
-              fi
-            done
-          else
-            echo "No files configured to skip for compile."
-          fi
-
-          echo "=== Skips staged in $SKIP_DIR ==="
-          ls -la "$SKIP_DIR" || echo "(none)"
-
       - name: Hardhat clean (avoid stale build-info)
         run: npx hardhat clean
 
@@ -58,58 +30,8 @@ jobs:
           echo "=== HARDHAT COMPILE ==="
           npx hardhat compile
 
-      - name: Restore temporarily skipped files (after compile)
-        if: always()
-        run: |
-          SKIP_DIR=".ci_skipped_compile"
-          if [ -d "$SKIP_DIR" ]; then
-            echo "=== Restoring skipped files (compile) ==="
-            ls -la "$SKIP_DIR" || true
-            mv "$SKIP_DIR"/* contracts/ 2>/dev/null || true
-            rmdir "$SKIP_DIR" 2>/dev/null || true
-          fi
-
-      # For tests, Hardhat recompiles what it needs; skip again to avoid the same error
-      - name: Temporarily skip files for tests
-        env:
-          SKIP_FOR_TESTS: contracts/DecentralizedInsurance.sol
-        run: |
-          set -e
-          SKIP_DIR=".ci_skipped_tests"
-          mkdir -p "$SKIP_DIR"
-
-          if [ -n "$SKIP_FOR_TESTS" ]; then
-            echo "=== Will skip for tests (temporary): $SKIP_FOR_TESTS ==="
-            IFS=',' read -ra FILES <<< "$SKIP_FOR_TESTS"
-            for f in "${FILES[@]}"; do
-              f_trimmed="$(echo "$f" | xargs)"
-              if [ -f "$f_trimmed" ]; then
-                echo "Skipping $f_trimmed -> $SKIP_DIR/$(basename "$f_trimmed")"
-                mv "$f_trimmed" "$SKIP_DIR/$(basename "$f_trimmed")"
-              else
-                echo "Skip target not found (ignored): $f_trimmed"
-              fi
-            done
-          else
-            echo "No files configured to skip for tests."
-          fi
-
-          echo "=== Skips staged in $SKIP_DIR ==="
-          ls -la "$SKIP_DIR" || echo "(none)"
-
       - name: Run Hardhat Tests
         run: npx hardhat test
-
-      - name: Restore temporarily skipped files (after tests)
-        if: always()
-        run: |
-          SKIP_DIR=".ci_skipped_tests"
-          if [ -d "$SKIP_DIR" ]; then
-            echo "=== Restoring skipped files (tests) ==="
-            ls -la "$SKIP_DIR" || true
-            mv "$SKIP_DIR"/* contracts/ 2>/dev/null || true
-            rmdir "$SKIP_DIR" 2>/dev/null || true
-          fi
 
   security:
     runs-on: ubuntu-latest
@@ -125,25 +47,7 @@ jobs:
           node-version: 20
 
       - name: Install dependencies
-        run: |
-          npm install
-          # Add legacy/alt packages so imports resolve for analyzers
-          npm install @openzeppelin/contracts @openzeppelin/contracts-upgradeable @chainlink/contracts openzeppelin-solidity zeppelin-solidity --no-save
-
-      - name: Verify dependencies for import resolution
-        run: |
-          echo "=== VERIFYING DEPENDENCIES FOR IMPORT RESOLUTION ==="
-          echo "pwd:"; pwd; echo
-          echo "OpenZeppelin contracts:"; ls -la node_modules/@openzeppelin/contracts/ | head -5 || true; echo
-          echo "OpenZeppelin (upgradeable):"; ls -la node_modules/@openzeppelin/contracts-upgradeable/ | head -5 || true; echo
-          echo "Chainlink contracts:"; ls -la node_modules/@chainlink/contracts/ | head -5 || true; echo
-          echo "Pyth Network:"; ls -la node_modules/@pythnetwork/ | head -5 || true; echo
-          echo "ERC721A:"; ls -la node_modules/erc721a/ | head -5 || true; echo
-          echo "Legacy zeppelin-solidity:"; ls -la node_modules/zeppelin-solidity/ | head -5 || true; echo
-          echo "Legacy openzeppelin-solidity:"; ls -la node_modules/openzeppelin-solidity/ | head -5 || true; echo
-          # Critical upgrades sanity check:
-          test -f node_modules/@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol && echo "OwnableUpgradeable ✅" || (echo "OwnableUpgradeable ❌" && exit 1)
-          echo "Dependencies verification complete"
+        run: npm install
 
       # -------------------------
       # Solhint (COMMENTED OUT)
@@ -226,12 +130,9 @@ jobs:
       #     fi
 
       # ==============================
-      # Echidna (simple, 0.8.x only; container paths)
+      # Echidna (0.8.x only; no per-contract skips)
       # ==============================
       - name: Run Echidna analysis
-        env:
-          # Comma-separated file names to skip in Echidna (optional)
-          ECHIDNA_SKIP: Ai.sol,DecentralizedInsurance.sol,agent.sol
         run: |
           echo "=== ECHIDNA SECURITY ANALYSIS ===" | tee -a security-report.txt
           echo "Tool: Echidna (trailofbits/echidna)" | tee -a security-report.txt
@@ -244,35 +145,15 @@ jobs:
 
           docker pull trailofbits/echidna:latest
 
-          IFS=',' read -ra SKIPS <<< "${ECHIDNA_SKIP:-}"
-          should_skip() {
-            local fname="$1"
-            for s in "${SKIPS[@]}"; do
-              if [ "$(echo "$s" | xargs)" = "$fname" ]; then
-                return 0
-              fi
-            done
-            return 1
-          }
-
           for contract in contracts/*.sol; do
             [ -f "$contract" ] || continue
             file="$(basename "$contract")"
             pragma=$(grep -m1 -E "pragma\s+solidity" "$contract" || true)
 
-            # Skip if not 0.8.x
+            # Only run Echidna on 0.8.x files
             if ! echo "$pragma" | grep -qE "0\.8"; then
               echo "========================================" | tee -a security-report.txt
               echo "Fuzz Testing: $file (skipped: Echidna run limited to 0.8.x)" | tee -a security-report.txt
-              echo "========================================" | tee -a security-report.txt
-              echo "" | tee -a security-report.txt
-              continue
-            fi
-
-            # Skip if explicitly listed
-            if should_skip "$file"; then
-              echo "========================================" | tee -a security-report.txt
-              echo "Fuzz Testing: $file (skipped by ECHIDNA_SKIP)" | tee -a security-report.txt
               echo "========================================" | tee -a security-report.txt
               echo "" | tee -a security-report.txt
               continue
@@ -282,7 +163,6 @@ jobs:
             echo "Fuzz Testing: $file" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # Use container paths in solc args
             docker run --rm \
               -v "$PWD":/src \
               -w /src \
@@ -297,29 +177,14 @@ jobs:
           done
 
       # ==============================
-      # Mythril (skip ONLY 0.4.x; also skip DecentralizedInsurance.sol & ChaosPushOracle.sol)
-      #  - Runs from workspace root
-      #  - Absolute base/include/allow paths
-      #  - Create @openzeppelin symlink so '@openzeppelin/…' imports resolve
-      #  - Avoid '-I' entirely (older solc can't handle it)
+      # Mythril (skip ONLY 0.4.x; no per-contract skips)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
           python3 -m pip install --upgrade pip
           pip install mythril solc-select
 
-      - name: Make package-style imports resolvable for Mythril
-        run: |
-          set -e
-          cd "$GITHUB_WORKSPACE"
-          if [ ! -e "@openzeppelin" ]; then
-            ln -s node_modules/@openzeppelin @openzeppelin
-          fi
-          ls -la @openzeppelin/contracts-upgradeable/access | head -10 || true
-
       - name: Run Mythril analysis
-        env:
-          MYTHRIL_SKIP: DecentralizedInsurance.sol,ChaosPushOracle.sol
         run: |
           set -e
           echo "=== MYTHRIL SECURITY ANALYSIS ===" | tee -a security-report.txt
@@ -332,13 +197,6 @@ jobs:
           echo "cwd: $ABS"
           echo "contracts present:"; ls -la "$ABS/contracts" || true
           echo ""
-
-          # Ensure OZ Upgradeable exists
-          if [ ! -f "$ABS/node_modules/@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol" ]; then
-            echo "contracts-upgradeable missing; installing..."
-            npm install @openzeppelin/contracts-upgradeable --no-save
-            test -f "$ABS/node_modules/@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol" || { echo "Still missing OwnableUpgradeable.sol"; exit 1; }
-          fi
 
           pick_version() {
             raw="$1"
@@ -359,17 +217,6 @@ jobs:
             solc-select versions | grep -q " $v " || solc-select install "$v" || true
           done
 
-          IFS=',' read -ra SKIPS <<< "${MYTHRIL_SKIP:-}"
-          should_skip_m() {
-            local fname="$1"
-            for s in "${SKIPS[@]}"; do
-              if [ "$(echo "$s" | xargs)" = "$fname" ]; then
-                return 0
-              fi
-            done
-            return 1
-          }
-
           for contract in contracts/*.sol; do
             [ -f "$contract" ] || continue
             name=$(basename "$contract")
@@ -377,7 +224,7 @@ jobs:
             token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
             solv=$(pick_version "$token")
 
-            # Skip ONLY 0.4.x with exact message
+            # Skip ONLY 0.4.x
             if echo "$solv" | grep -q "^0\.4"; then
               echo "========================================" | tee -a security-report.txt
               echo "Analyzing: $name (skipped: Can't compile and I use Mythril on old contracts.)" | tee -a security-report.txt
@@ -386,23 +233,11 @@ jobs:
               continue
             fi
 
-            # Skip explicit list
-            if should_skip_m "$name"; then
-              echo "========================================" | tee -a security-report.txt
-              echo "Analyzing: $name (skipped by MYTHRIL_SKIP)" | tee -a security-report.txt
-              echo "========================================" | tee -a security-report.txt
-              echo "" | tee -a security-report.txt
-              continue
-            fi
-
-            echo "File check:"; ls -la "$ABS/contracts/$name" || true
-
             echo "========================================" | tee -a security-report.txt
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
             if echo "$solv" | grep -Eq "^0\.(5|6)\."; then
-              # Older compilers: minimal flags (no -I, no base-path)
               myth analyze "contracts/$name" \
                 --solv "$solv" \
                 --solc-args "--allow-paths $ABS,$ABS/node_modules" \
@@ -412,7 +247,6 @@ jobs:
                 --solver-timeout 10000 \
                 2>&1 | tee -a security-report.txt || true
             else
-              # 0.7+/0.8.x: relative file; absolute base/include/allow paths
               myth analyze "contracts/$name" \
                 --solv "$solv" \
                 --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
