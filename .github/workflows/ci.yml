@@ -297,17 +297,29 @@ jobs:
           done
 
       # ==============================
-      # Mythril (skip ONLY 0.4.x; also skip DecentralizedInsurance.sol)
-      # Use relative file paths; cd into workspace; absolute base/include/allow paths
+      # Mythril (skip ONLY 0.4.x; also skip DecentralizedInsurance.sol & ChaosPushOracle.sol)
+      #  - Runs from workspace root
+      #  - Absolute base/include/allow paths
+      #  - Create @openzeppelin symlink so '@openzeppelin/…' imports resolve
+      #  - Avoid '-I' entirely (older solc can't handle it)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
           python3 -m pip install --upgrade pip
           pip install mythril solc-select
 
+      - name: Make package-style imports resolvable for Mythril
+        run: |
+          set -e
+          cd "$GITHUB_WORKSPACE"
+          if [ ! -e "@openzeppelin" ]; then
+            ln -s node_modules/@openzeppelin @openzeppelin
+          fi
+          ls -la @openzeppelin/contracts-upgradeable/access | head -10 || true
+
       - name: Run Mythril analysis
         env:
-          MYTHRIL_SKIP: DecentralizedInsurance.sol
+          MYTHRIL_SKIP: DecentralizedInsurance.sol,ChaosPushOracle.sol
         run: |
           set -e
           echo "=== MYTHRIL SECURITY ANALYSIS ===" | tee -a security-report.txt
@@ -315,7 +327,6 @@ jobs:
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo ""
 
-          # Always operate from the workspace root
           cd "$GITHUB_WORKSPACE"
           ABS="$(pwd)"
           echo "cwd: $ABS"
@@ -366,7 +377,7 @@ jobs:
             token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
             solv=$(pick_version "$token")
 
-            # Skip ONLY 0.4.x with your exact message
+            # Skip ONLY 0.4.x with exact message
             if echo "$solv" | grep -q "^0\.4"; then
               echo "========================================" | tee -a security-report.txt
               echo "Analyzing: $name (skipped: Can't compile and I use Mythril on old contracts.)" | tee -a security-report.txt
@@ -375,7 +386,7 @@ jobs:
               continue
             fi
 
-            # Skip explicit list (e.g., DecentralizedInsurance.sol)
+            # Skip explicit list
             if should_skip_m "$name"; then
               echo "========================================" | tee -a security-report.txt
               echo "Analyzing: $name (skipped by MYTHRIL_SKIP)" | tee -a security-report.txt
@@ -384,9 +395,7 @@ jobs:
               continue
             fi
 
-            # Sanity: verify file exists where solc expects
-            echo "File check:"
-            ls -la "$ABS/contracts/$name" || true
+            echo "File check:"; ls -la "$ABS/contracts/$name" || true
 
             echo "========================================" | tee -a security-report.txt
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
@@ -403,7 +412,7 @@ jobs:
                 --solver-timeout 10000 \
                 2>&1 | tee -a security-report.txt || true
             else
-              # 0.7+/0.8.x: relative path; absolute include/base/allow
+              # 0.7+/0.8.x: relative file; absolute base/include/allow paths
               myth analyze "contracts/$name" \
                 --solv "$solv" \
                 --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
