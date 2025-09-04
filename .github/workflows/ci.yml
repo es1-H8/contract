@@ -49,7 +49,7 @@ jobs:
       - name: Install NPM dependencies (incl. import-heavy tool deps)
         run: |
           npm install
-          # Ensure packages used by imports are present for Mythril/Echidna resolution
+          # Ensure packages used by imports exist for analysis tools
           npm i -D @openzeppelin/contracts @openzeppelin/contracts-upgradeable @chainlink/contracts @pythnetwork/pyth-sdk-solidity @uniswap/v2-core @uniswap/v2-periphery erc721a || true
 
       - name: Verify dependencies for import resolution
@@ -57,8 +57,8 @@ jobs:
           echo "=== VERIFYING DEPENDENCIES FOR IMPORT RESOLUTION ==="
           for p in \
             node_modules/@openzeppelin/contracts \
-            node_modules/@openzeppelin/contracts-upgradeable \
-            node_modules/@chainlink/contracts \
+            node_modules/@openzeppelin/contracts-upgradeable/contracts \
+            node_modules/@chainlink/contracts/src \
             node_modules/@pythnetwork \
             node_modules/erc721a \
             node_modules/@uniswap \
@@ -117,20 +117,12 @@ jobs:
       #       echo "@pythnetwork/=node_modules/@pythnetwork/"
       #       echo "erc721a/=node_modules/erc721a/"
       #       echo "@uniswap/=node_modules/@uniswap/"
-      #       echo "zeppelin-solidity/=node_modules/zeppelin-solidity/"
-      #       echo "openzeppelin-solidity/=node_modules/openzeppelin-solidity/"
       #     } > remappings.txt
       #     echo "Remappings created:"; cat remappings.txt; echo ""
       #     slither . --solc-args="--base-path . --include-path node_modules --allow-paths .,node_modules" 2>&1 | tee raw-slither.txt || echo "Slither completed with findings" | tee -a raw-slither.txt
-      #     echo "" | tee -a security-report.txt
-      #     echo "----------------------------------------" | tee -a security-report.txt
-      #     echo "Slither Analysis Results" | tee -a security-report.txt
-      #     echo "----------------------------------------" | tee -a security-report.txt
-      #     ls contracts/*.sol 2>/dev/null | sed 's#contracts/#  - #' | tee -a security-report.txt
-      #     echo "" | tee -a security-report.txt
 
       # ==============================
-      # Echidna (multi-solc via toolbox)
+      # Echidna (v2 CLI + per-file solc-select + remaps)
       # ==============================
       - name: Prepare Echidna config
         run: |
@@ -138,7 +130,7 @@ jobs:
           echo "Created/verified echidna.yaml:"
           cat echidna.yaml
 
-      - name: Run Echidna analysis (solc-select per file)
+      - name: Run Echidna analysis (v2 CLI, solc-select per file)
         run: |
           echo "=== ECHIDNA SECURITY ANALYSIS ===" | tee -a security-report.txt
           echo "Tool: Echidna (trailofbits/eth-security-toolbox)" | tee -a security-report.txt
@@ -155,8 +147,8 @@ jobs:
               0.5.*) echo "0.5.17" ;;
               0.6.*) echo "0.6.12" ;;
               0.7.*) echo "0.7.6"  ;;
-              0.8.[0-9][0-9]|0.8.[0-9]) echo "$v" ;;  # exact 0.8.x
-              0.8.*) echo "0.8.26" ;;                 # default for generic 0.8.*
+              0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20|0.8.19) echo "$v" ;;
+              0.8.*) echo "0.8.26" ;;
               *) echo "0.8.26" ;;
             esac
           }
@@ -168,7 +160,7 @@ jobs:
             token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
             SOLV=$(pick_version "$token")
 
-            # Only fuzz 0.8.x here to keep parity with your earlier guard
+            # Keep your original guard: fuzz only 0.8.x
             if ! echo "$pragma" | grep -qE "0\.8"; then
               echo "========================================" | tee -a security-report.txt
               echo "Fuzz Testing: $file (skipped: Echidna run limited to 0.8.x)" | tee -a security-report.txt
@@ -186,19 +178,21 @@ jobs:
               -w /src \
               trailofbits/eth-security-toolbox:latest \
               bash -lc "
+                set -e
                 solc-select install $SOLV || true
                 solc-select use $SOLV
-                echidna-test 'contracts/$file' \
+                echidna --version
+                echidna test 'contracts/$file' \
                   --test-mode assertion \
                   --config echidna.yaml \
-                  --solc-args '--base-path /src --include-path /src/node_modules --allow-paths /src,/src/node_modules'
+                  --solc-args '--base-path /src --include-path /src/node_modules --allow-paths /src,/src/node_modules @openzeppelin/contracts-upgradeable=/src/node_modules/@openzeppelin/contracts-upgradeable/contracts @chainlink/contracts=/src/node_modules/@chainlink/contracts/src'
               " 2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
           done
 
       # ==============================
-      # Mythril (multi-solc; imports resolved)
+      # Mythril (multi-solc + remaps)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
@@ -226,13 +220,13 @@ jobs:
               0.5.*) echo "0.5.17" ;;
               0.6.*) echo "0.6.12" ;;
               0.7.*) echo "0.7.6"  ;;
-              0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20) echo "$v" ;;
+              0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20|0.8.19) echo "$v" ;;
               0.8.*) echo "0.8.26" ;;
               *) echo "0.8.20" ;;
             esac
           }
 
-          for v in 0.4.26 0.5.17 0.6.12 0.7.6 0.8.20 0.8.26 0.8.30; do
+          for v in 0.4.26 0.5.17 0.6.12 0.7.6 0.8.19 0.8.20 0.8.26 0.8.30; do
             solc-select versions | grep -q " $v " || solc-select install "$v" || true
           done
 
@@ -255,6 +249,9 @@ jobs:
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
+            # Add remaps so OZ Upgradeable & Chainlink resolve under node_modules
+            EXTRA_ARGS="--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules @openzeppelin/contracts-upgradeable=$ABS/node_modules/@openzeppelin/contracts-upgradeable/contracts @chainlink/contracts=$ABS/node_modules/@chainlink/contracts/src"
+
             if echo "$solv" | grep -Eq "^0\.(5|6)\."; then
               myth analyze "contracts/$name" \
                 --solv "$solv" \
@@ -267,7 +264,7 @@ jobs:
             else
               myth analyze "contracts/$name" \
                 --solv "$solv" \
-                --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
+                --solc-args "$EXTRA_ARGS" \
                 --execution-timeout 120 \
                 --max-depth 16 \
                 --create-timeout 60 \
