@@ -50,7 +50,14 @@ jobs:
         run: |
           npm install
           # Ensure packages used by imports exist for analysis tools
-          npm i -D @openzeppelin/contracts @openzeppelin/contracts-upgradeable @chainlink/contracts @pythnetwork/pyth-sdk-solidity @uniswap/v2-core @uniswap/v2-periphery erc721a || true
+          npm i -D \
+            @openzeppelin/contracts \
+            @openzeppelin/contracts-upgradeable \
+            @chainlink/contracts \
+            @pythnetwork/pyth-sdk-solidity \
+            @uniswap/v2-core \
+            @uniswap/v2-periphery \
+            erc721a || true
 
       - name: Verify dependencies for import resolution
         run: |
@@ -122,14 +129,14 @@ jobs:
       #     slither . --solc-args="--base-path . --include-path node_modules --allow-paths .,node_modules" 2>&1 | tee raw-slither.txt || echo "Slither completed with findings" | tee -a raw-slither.txt
 
       # ==============================
-      # Echidna (v2 CLI; compile with solc inside container; absolute target)
+      # Echidna (use legacy binary echidna-test; compile with solc; absolute paths)
       # ==============================
       - name: Prepare Echidna config
         run: |
           [ -f echidna.yaml ] || printf "testLimit: 100\nseqLen: 50\n" > echidna.yaml
           echo "Created/verified echidna.yaml:"; cat echidna.yaml
 
-      - name: Run Echidna analysis (per-file solc-select; target=/src)
+      - name: Run Echidna analysis (per-file; target=/src/contracts/<file>)
         run: |
           echo "=== ECHIDNA SECURITY ANALYSIS ===" | tee -a security-report.txt
           echo "Tool: Echidna (trailofbits/eth-security-toolbox)" | tee -a security-report.txt
@@ -160,7 +167,7 @@ jobs:
             token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
             SOLV=$(pick_version "$token")
 
-            # Only fuzz 0.8.x
+            # Only fuzz 0.8.x (your previous policy)
             if ! echo "$pragma" | grep -qE "0\.8"; then
               echo "========================================" | tee -a security-report.txt
               echo "Fuzz Testing: $file (skipped: Echidna run limited to 0.8.x)" | tee -a security-report.txt
@@ -182,8 +189,8 @@ jobs:
                 solc-select install $SOLV || true
                 solc-select use $SOLV
                 echidna --version
-                # compile with solc (no hardhat); absolute target path
-                echidna test /src \
+                # Use legacy entrypoint to avoid 'test' target confusion
+                echidna-test /src/contracts/$file \
                   --contract $name \
                   --test-mode assertion \
                   --config echidna.yaml \
@@ -194,7 +201,7 @@ jobs:
           done
 
       # ==============================
-      # Mythril (Standard JSON; rely on include-paths; no --solc-settings-json)
+      # Mythril (branch solc args by version; extra include paths for OZ-Upgradeable/Chainlink)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
@@ -237,9 +244,20 @@ jobs:
             name=$(basename "$contract")
             pragma=$(grep -m1 -E "pragma\\s+solidity" "$contract" || true)
             token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
-            solv=$(pick_version "$token")
+            solv=$(pick_version("$token"))
 
-            if echo "$solv" | grep -q "^0\\.4"; then
+            # Build solc-args per version: 0.6+ supports base/include; 0.4/0.5 do not.
+            if echo "$solv" | grep -Eq '^0\.[46-9]\.'; then
+              SOLC_ARGS="--base-path $ABS \
+                --include-path $ABS/node_modules \
+                --include-path $ABS/node_modules/@openzeppelin \
+                --include-path $ABS/node_modules/@chainlink \
+                --allow-paths $ABS,$ABS/node_modules"
+            else
+              SOLC_ARGS="--allow-paths $ABS,$ABS/node_modules"
+            fi
+
+            if echo "$solv" | grep -q '^0\.4'; then
               echo "========================================" | tee -a security-report.txt
               echo "Analyzing: $name (skipped: Can't compile and I use Mythril on old contracts.)" | tee -a security-report.txt
               echo "========================================" | tee -a security-report.txt
@@ -253,7 +271,7 @@ jobs:
 
             myth analyze "contracts/$name" \
               --solv "$solv" \
-              --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
+              --solc-args "$SOLC_ARGS" \
               --execution-timeout 120 \
               --max-depth 16 \
               --create-timeout 60 \
