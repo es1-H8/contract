@@ -46,70 +46,44 @@ jobs:
         with:
           node-version: 20
 
-      - name: Install NPM dependencies (incl. import-heavy tool deps)
-        run: |
-          npm install
-          # Ensure packages used by imports exist for analysis tools
-          npm i -D \
-            @openzeppelin/contracts \
-            @openzeppelin/contracts-upgradeable \
-            @chainlink/contracts \
-            @pythnetwork/pyth-sdk-solidity \
-            @uniswap/v2-core \
-            @uniswap/v2-periphery \
-            erc721a || true
-
-      - name: Verify dependencies for import resolution
-        run: |
-          echo "=== VERIFYING DEPENDENCIES FOR IMPORT RESOLUTION ==="
-          for p in \
-            node_modules/@openzeppelin/contracts \
-            node_modules/@openzeppelin/contracts-upgradeable/contracts \
-            node_modules/@chainlink/contracts/src \
-            node_modules/@pythnetwork \
-            node_modules/erc721a \
-            node_modules/@uniswap \
-          ; do
-            echo ""
-            echo "Checking $p"
-            ls -la "$p" | head -20 || true
-          done
-          echo ""
-          echo "Dependencies verification complete"
+      - name: Install dependencies
+        run: npm install
 
       # -------------------------
-      # SOLHINT (COMMENTED OUT)
+      # Solhint (COMMENTED OUT)
       # -------------------------
       # - name: Install Solhint
       #   run: npm install -g solhint
       #
       # - name: Run Solhint linting
       #   run: |
-      #     echo "=== SOLHINT SECURITY ANALYSIS ===" | tee security-report.txt
+      #     echo "=== SOLHINT SECURITY ANALYSIS ===" | tee -a security-report.txt
       #     echo "Tool: Solhint" | tee -a security-report.txt
       #     echo "Timestamp: $(date)" | tee -a security-report.txt
       #     echo "" | tee -a security-report.txt
-      #     shopt -s nullglob
+      #     echo "Analyzing contracts:" | tee -a security-report.txt
+      #     ls -la contracts/*.sol | tee -a security-report.txt
+      #     echo "" | tee -a security-report.txt
       #     for contract in contracts/*.sol; do
-      #       contract_name=$(basename "$contract")
-      #       echo "========================================" | tee -a security-report.txt
-      #       echo "Analyzing: $contract_name" | tee -a security-report.txt
-      #       echo "========================================" | tee -a security-report.txt
-      #       npx solhint "$contract" --formatter=unix | tee -a security-report.txt || echo "No issues found in $contract_name" | tee -a security-report.txt
-      #       echo "" | tee -a security-report.txt
+      #       if [ -f "$contract" ]; then
+      #         contract_name=$(basename "$contract")
+      #         echo "========================================" | tee -a security-report.txt
+      #         echo "Analyzing: $contract_name" | tee -a security-report.txt
+      #         echo "========================================" | tee -a security-report.txt
+      #         npx solhint "$contract" --formatter=unix | tee -a security-report.txt || echo "No issues found in $contract_name" | tee -a security-report.txt
+      #         echo "" | tee -a security-report.txt
+      #       fi
       #     done
-      #     TOTAL_CONTRACTS=$(ls contracts/*.sol 2>/dev/null | wc -l | xargs)
+      #     TOTAL_CONTRACTS=$(ls contracts/*.sol | wc -l)
       #     echo "=== SOLHINT ANALYSIS COMPLETE ===" | tee -a security-report.txt
       #     echo "Total contracts analyzed: $TOTAL_CONTRACTS" | tee -a security-report.txt
       #     echo "" | tee -a security-report.txt
 
       # -------------------------
-      # SLITHER (COMMENTED OUT)
+      # Slither (COMMENTED OUT)
       # -------------------------
       # - name: Install Slither
-      #   run: |
-      #     python3 -m pip install --upgrade pip
-      #     pip install slither-analyzer
+      #   run: pip install slither-analyzer
       #
       # - name: Run Slither analysis
       #   run: |
@@ -118,99 +92,97 @@ jobs:
       #     echo "Timestamp: $(date)" | tee -a security-report.txt
       #     echo "" | tee -a security-report.txt
       #     echo "Creating remappings.txt for import resolution..."
-      #     {
-      #       echo "@openzeppelin/=node_modules/@openzeppelin/"
-      #       echo "@chainlink/=node_modules/@chainlink/"
-      #       echo "@pythnetwork/=node_modules/@pythnetwork/"
-      #       echo "erc721a/=node_modules/erc721a/"
-      #       echo "@uniswap/=node_modules/@uniswap/"
-      #     } > remappings.txt
-      #     echo "Remappings created:"; cat remappings.txt; echo ""
-      #     slither . --solc-args="--base-path . --include-path node_modules --allow-paths .,node_modules" 2>&1 | tee raw-slither.txt || echo "Slither completed with findings" | tee -a raw-slither.txt
+      #     echo "@openzeppelin/=node_modules/@openzeppelin/" > remappings.txt
+      #     echo "@chainlink/=node_modules/@chainlink/" >> remappings.txt
+      #     echo "@pythnetwork/=node_modules/@pythnetwork/" >> remappings.txt
+      #     echo "erc721a/=node_modules/erc721a/" >> remappings.txt
+      #     echo "@uniswap/=node_modules/@uniswap/" >> remappings.txt
+      #     echo "zeppelin-solidity/=node_modules/zeppelin-solidity/" >> remappings.txt
+      #     echo "openzeppelin-solidity/=node_modules/openzeppelin-solidity/" >> remappings.txt
+      #     cat remappings.txt
+      #     echo ""
+      #     echo "Running Slither analysis on entire project for import resolution..."
+      #     slither . 2>&1 | tee -a raw-slither.txt || echo "Slither analysis completed" | tee -a raw-slither.txt
+      #     echo "" | tee -a security-report.txt
+      #     echo "----------------------------------------" | tee -a security-report.txt
+      #     echo "Slither Analysis Results" | tee -a security-report.txt
+      #     echo "----------------------------------------" | tee -a security-report.txt
+      #     echo "Contracts analyzed:" | tee -a security-report.txt
+      #     ls contracts/*.sol | sed 's/contracts\//  - /' | tee -a security-report.txt
+      #     echo "" | tee -a security-report.txt
+      #     echo "" | tee -a security-report.txt
+      #     echo "----------------------------------------" | tee -a security-report.txt
+      #     echo "Formatted Slither Report (Grouped by Contract)" | tee -a security-report.txt
+      #     echo "----------------------------------------" | tee -a security-report.txt
+      #     if [ -s raw-slither.txt ]; then
+      #       awk '... (omitted for brevity) ...' raw-slither.txt | tee -a security-report.txt || {
+      #         echo "========================================" | tee -a security-report.txt
+      #         echo "Ungrouped Slither Output" | tee -a security-report.txt
+      #         echo "========================================" | tee -a security-report.txt
+      #         cat raw-slither.txt | tee -a security-report.txt
+      #         echo "\n\n" | tee -a security-report.txt
+      #       }
+      #       echo "========================================" | tee -a security-report.txt
+      #       echo "END OF SLITHER ANALYSIS" | tee -a security-report.txt
+      #       echo "========================================" | tee -a security-report.txt
+      #     else
+      #       echo "No Slither analysis output found" | tee -a security-report.txt
+      #     fi
 
       # ==============================
-      # Echidna (use legacy binary echidna-test; compile with solc; absolute paths)
+      # Echidna (run for 0.5.x–0.8.x; skip only 0.4.x)
       # ==============================
-      - name: Prepare Echidna config
-        run: |
-          [ -f echidna.yaml ] || printf "testLimit: 100\nseqLen: 50\n" > echidna.yaml
-          echo "Created/verified echidna.yaml:"; cat echidna.yaml
-
-      - name: Run Echidna analysis (per-file; target=/src/contracts/<file>)
+      - name: Run Echidna analysis
         run: |
           echo "=== ECHIDNA SECURITY ANALYSIS ===" | tee -a security-report.txt
-          echo "Tool: Echidna (trailofbits/eth-security-toolbox)" | tee -a security-report.txt
+          echo "Tool: Echidna (trailofbits/echidna)" | tee -a security-report.txt
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo "" | tee -a security-report.txt
 
-          docker pull trailofbits/eth-security-toolbox:latest
+          if [ ! -f echidna.yaml ]; then
+            echo "testLimit: 100" > echidna.yaml
+          fi
 
-          pick_version() {
-            raw="$1"
-            v="${raw//^/}"; v="${v//>=/}"; v="${v//~=/}"; v="${v// /}"
-            case "$v" in
-              0.4.*) echo "0.4.26" ;;
-              0.5.*) echo "0.5.17" ;;
-              0.6.*) echo "0.6.12" ;;
-              0.7.*) echo "0.7.6"  ;;
-              0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20|0.8.19) echo "$v" ;;
-              0.8.*) echo "0.8.26" ;;
-              *) echo "0.8.26" ;;
-            esac
-          }
+          docker pull trailofbits/echidna:latest
 
-          shopt -s nullglob
           for contract in contracts/*.sol; do
+            [ -f "$contract" ] || continue
             file="$(basename "$contract")"
-            name="${file%.sol}"
             pragma=$(grep -m1 -E "pragma\s+solidity" "$contract" || true)
-            token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
-            SOLV=$(pick_version "$token")
 
-            # Only fuzz 0.8.x (policy kept)
-            if ! echo "$pragma" | grep -qE "0\.8"; then
+            # Skip ONLY Solidity 0.4.x; run Echidna for 0.5.x–0.8.x
+            if echo "$pragma" | grep -qE "0\.4"; then
               echo "========================================" | tee -a security-report.txt
-              echo "Fuzz Testing: $file (skipped: Echidna run limited to 0.8.x)" | tee -a security-report.txt
+              echo "Fuzz Testing: $file (skipped: Solidity 0.4.x out of scope)" | tee -a security-report.txt
               echo "========================================" | tee -a security-report.txt
               echo "" | tee -a security-report.txt
               continue
             fi
 
             echo "========================================" | tee -a security-report.txt
-            echo "Fuzz Testing: $file (solc $SOLV)" | tee -a security-report.txt
+            echo "Fuzz Testing: $file" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
             docker run --rm \
               -v "$PWD":/src \
               -w /src \
-              trailofbits/eth-security-toolbox:latest \
-              bash -lc "
-                set -e
-                solc-select install $SOLV || true
-                solc-select use $SOLV
-                echidna --version
-                # Use legacy entrypoint to avoid 'Compiling `test`' target confusion
-                echidna-test /src/contracts/$file \
-                  --contract $name \
-                  --test-mode assertion \
-                  --config echidna.yaml \
-                  --solc-args '--base-path /src --include-path /src/node_modules --allow-paths /src,/src/node_modules'
-              " 2>&1 | tee -a security-report.txt || true
+              trailofbits/echidna:latest \
+              echidna-test "contracts/$file" \
+                --test-mode assertion \
+                --config echidna.yaml \
+                --solc-args "--base-path /src --include-path /src/node_modules --allow-paths /src,/src/node_modules" \
+              2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
           done
 
       # ==============================
-      # Mythril (branch solc args by version; explicit include paths)
+      # Mythril (skip ONLY 0.4.x; no per-contract skips)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
           python3 -m pip install --upgrade pip
           pip install mythril solc-select
-          # Pre-install a set of common solc versions (idempotent; don't query 'versions')
-          for v in 0.4.26 0.5.17 0.6.12 0.7.6 0.8.19 0.8.20 0.8.26 0.8.30; do
-            solc-select install -f "$v" || true
-          done
 
       - name: Run Mythril analysis
         run: |
@@ -219,7 +191,7 @@ jobs:
           echo "Tool: Mythril" | tee -a security-report.txt
           echo "Timestamp: $(date)" | tee -a security-report.txt
           echo ""
-
+          cd "$GITHUB_WORKSPACE"
           ABS="$(pwd)"
           echo "cwd: $ABS"
           echo "contracts present:"; ls -la "$ABS/contracts" || true
@@ -233,21 +205,26 @@ jobs:
               0.5.*) echo "0.5.17" ;;
               0.6.*) echo "0.6.12" ;;
               0.7.*) echo "0.7.6"  ;;
-              0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20|0.8.19) echo "$v" ;;
+              0.8.30|0.8.29|0.8.28|0.8.27|0.8.26|0.8.25|0.8.24|0.8.23|0.8.22|0.8.21|0.8.20) echo "$v" ;;
               0.8.*) echo "0.8.26" ;;
               *) echo "0.8.20" ;;
             esac
           }
 
-          shopt -s nullglob
-          for contract in contracts/*.sol; do
-            name=$(basename "$contract")
-            pragma=$(grep -m1 -E "pragma\\s+solidity" "$contract" || true)
-            token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
-            solv=$(pick_version "$token")   # fixed bash syntax
+          # Pre-install common solc versions
+          for v in 0.4.26 0.5.17 0.6.12 0.7.6 0.8.20 0.8.26 0.8.30; do
+            solc-select versions | grep -q " $v " || solc-select install "$v" || true
+          done
 
-            # Skip 0.4.x per policy
-            if echo "$solv" | grep -q '^0\.4'; then
+          for contract in contracts/*.sol; do
+            [ -f "$contract" ] || continue
+            name=$(basename "$contract")
+            pragma=$(grep -m1 -E "pragma\s+solidity" "$contract" || true)
+            token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
+            solv=$(pick_version "$token")
+
+            # Skip ONLY 0.4.x
+            if echo "$solv" | grep -q "^0\.4"; then
               echo "========================================" | tee -a security-report.txt
               echo "Analyzing: $name (skipped: Can't compile and I use Mythril on old contracts.)" | tee -a security-report.txt
               echo "========================================" | tee -a security-report.txt
@@ -255,34 +232,29 @@ jobs:
               continue
             fi
 
-            # Build solc-args:
-            # - 0.6+ supports --base-path/--include-path
-            # - 0.5.x does NOT; only use --allow-paths
-            if echo "$solv" | grep -Eq '^0\.[6-9]\.'; then
-              SOLC_ARGS="--base-path $ABS \
-                --include-path $ABS/node_modules \
-                --include-path $ABS/node_modules/@openzeppelin \
-                --include-path $ABS/node_modules/@chainlink \
-                --allow-paths $ABS,$ABS/node_modules"
-            else
-              SOLC_ARGS="--allow-paths $ABS,$ABS/node_modules"
-            fi
-
             echo "========================================" | tee -a security-report.txt
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # Ensure the chosen compiler is active
-            solc-select use "$solv"
-
-            myth analyze "contracts/$name" \
-              --solv "$solv" \
-              --solc-args "$SOLC_ARGS" \
-              --execution-timeout 120 \
-              --max-depth 16 \
-              --create-timeout 60 \
-              --solver-timeout 10000 \
-              2>&1 | tee -a security-report.txt || true
+            if echo "$solv" | grep -Eq "^0\.(5|6)\."; then
+              myth analyze "contracts/$name" \
+                --solv "$solv" \
+                --solc-args "--allow-paths $ABS,$ABS/node_modules" \
+                --execution-timeout 120 \
+                --max-depth 16 \
+                --create-timeout 60 \
+                --solver-timeout 10000 \
+                2>&1 | tee -a security-report.txt || true
+            else
+              myth analyze "contracts/$name" \
+                --solv "$solv" \
+                --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
+                --execution-timeout 120 \
+                --max-depth 16 \
+                --create-timeout 60 \
+                --solver-timeout 10000 \
+                2>&1 | tee -a security-report.txt || true
+            fi
 
             echo "" | tee -a security-report.txt
           done
@@ -313,11 +285,11 @@ jobs:
       - name: Discover contracts for deployment
         run: |
           echo "=== CONTRACTS DISCOVERED FOR DEPLOYMENT ==="
-          ls -la contracts/ || true
+          ls -la contracts/
           echo ""
-          ls contracts/*.sol 2>/dev/null | sed 's#contracts/#  - #'
+          ls contracts/*.sol | sed 's/contracts\//  - /'
           echo ""
-          echo "Total contracts to deploy: $(ls contracts/*.sol 2>/dev/null | wc -l | xargs)"
+          echo "Total contracts to deploy: $(ls contracts/*.sol | wc -l)"
 
       - name: Deploy to Sepolia Testnet
         env:
