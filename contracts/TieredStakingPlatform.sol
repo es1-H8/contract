@@ -2,8 +2,8 @@
 pragma solidity ^0.8.20;
 
 import "@chainlink/contracts/src/v0.8/interfaces/AggregatorV3Interface.sol";
-import "@openzeppelin/contracts@5.0.2/token/ERC20/IERC20.sol";
-import "@openzeppelin/contracts@5.0.2/access/Ownable.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 // Tiered Staking Platform with Chainlink Price Feed for Dynamic Rewards
 contract TieredStakingPlatform is Ownable {
