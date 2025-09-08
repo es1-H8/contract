@@ -41,10 +41,10 @@ contract ChonkCoin is ERC20, Ownable {
     /// @param from Sender address
     /// @param to Recipient address
     /// @param amount Amount of tokens to transfer
-    /// @dev Overrides ERC20 _update to include fee logic
-    function _update(address from, address to, uint256 amount) internal virtual override {
+    /// @dev Overrides ERC20 _transfer to include fee logic
+    function _transfer(address from, address to, uint256 amount) internal virtual override {
         // Perform the full transfer first
-        super._update(from, to, amount);
+        super._transfer(from, to, amount);
 
         // Apply fees only on regular transfers (not minting or burning)
         if (from != address(0) && to != address(0) && taxFee > 0) {
@@ -54,7 +54,7 @@ contract ChonkCoin is ERC20, Ownable {
 
             // Transfer liquidity fee to liquidity wallet
             if (liquidityAmount > 0) {
-                super._update(from, liquidityWallet, liquidityAmount);
+                super._transfer(from, liquidityWallet, liquidityAmount);
             }
 
             // Burn the burn fee portion

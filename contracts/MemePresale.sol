@@ -338,7 +338,7 @@ contract MemePresale is Ownable, ReentrancyGuard {
         IERC20 _usdc,
         address payable _treasury,
         uint256 _totalSupply
-    ) Ownable() {
+    ) Ownable(msg.sender) {
         require(address(_token) != address(0), "Token address is zero");
         require(address(_usdt) != address(0), "USDT address is zero");
         require(address(_usdc) != address(0), "USDC address is zero");

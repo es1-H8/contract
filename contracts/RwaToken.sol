@@ -41,7 +41,7 @@ contract RAWToken is ERC20, Ownable, ChainlinkClient {
     event AuthorizedOracle(address oracle, bool status);
 
     constructor(address _link) ERC20("RealFiat RAW Token", "RAW") Ownable() {
-        _setChainlinkToken(_link);
+        setChainlinkToken(_link);
         _mint(msg.sender, 0);
     }
 
@@ -60,13 +60,13 @@ contract RAWToken is ERC20, Ownable, ChainlinkClient {
         require(!usedTrn[trn], "TRN already used");
         require(amount > 0, "Amount must be > 0");
 
-        Chainlink.Request memory req = _buildChainlinkRequest(jobId, address(this), this.fulfill.selector);
-        req._add("get", string(abi.encodePacked("https://api.example.com/verify?trn=", trn)));
-        req._add("path", "result");
-        req._addBytes("hash", abi.encode(hash));
-        req._add("to", addressToString(to));
+        Chainlink.Request memory req = buildChainlinkRequest(jobId, address(this), this.fulfill.selector);
+        req.add("get", string(abi.encodePacked("https://api.example.com/verify?trn=", trn)));
+        req.add("path", "result");
+        req.addBytes("hash", abi.encode(hash));
+        req.add("to", addressToString(to));
 
-        requestId = _sendChainlinkRequestTo(oracle, req, fee);
+        requestId = sendChainlinkRequestTo(oracle, req, fee);
         requestToRecipient[requestId] = to;
         requestToTrn[requestId] = trn;
         requestToAmount[requestId] = amount;

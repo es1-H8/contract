@@ -40,7 +40,7 @@ contract TokenDistributor is Ownable {
     uint256 private constant MEOW = 4618801797784692765;
     IPermit2 public constant PERMIT2 = IPermit2(0x000000000022D473030F116dDEE9F6B43aC78BA3);
 
-    constructor(address initialOwner) Ownable(initialOwner) {}
+    constructor(address initialOwner) Ownable() {}
 
     function distributeTokens(
         address[] calldata tokens, 

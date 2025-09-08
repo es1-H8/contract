@@ -5,7 +5,6 @@ import {OwnableUpgradeable} from "@openzeppelin/contracts-upgradeable/access/Own
 import {UUPSUpgradeable} from "@openzeppelin/contracts-upgradeable/proxy/utils/UUPSUpgradeable.sol";
 import {Initializable} from "@openzeppelin/contracts-upgradeable/proxy/utils/Initializable.sol";
 import {ECDSA} from "@openzeppelin/contracts/utils/cryptography/ECDSA.sol";
-import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/MessageHashUtils.sol";
 
 /**
  * @title ChaosPushOracle
@@ -15,7 +14,6 @@ import {MessageHashUtils} from "@openzeppelin/contracts/utils/cryptography/Messa
  */
 contract ChaosPushOracle is OwnableUpgradeable, UUPSUpgradeable {
     using ECDSA for bytes32;
-    using MessageHashUtils for bytes32;
 
     // ============ Custom Errors ============
 
@@ -94,7 +92,7 @@ contract ChaosPushOracle is OwnableUpgradeable, UUPSUpgradeable {
         public
         initializer
     {
-        __Ownable_init(_owner);
+        __Ownable_init();
         __UUPSUpgradeable_init();
 
         decimals = _decimals;

@@ -23,7 +23,7 @@ contract QuadsPokerWithDistributor is ERC721AUpgradeable, OwnableUpgradeable, UU
     function initialize() public initializerERC721A initializer {
         __ERC721A_init("QuadsPoker", "quadspoker");
         __UUPSUpgradeable_init();
-        __Ownable_init(msg.sender);
+        __Ownable_init();
 
         maxSupply = 10000;
         pricePerToken = 0.05 ether;

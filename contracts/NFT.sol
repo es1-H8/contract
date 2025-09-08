@@ -1,16 +1,16 @@
-pragma solidity 0.5.0;
+pragma solidity ^0.8.20;
 
-// Use these imports for local npm installation (openzeppelin-solidity@2.3.0)
-import "openzeppelin-solidity/contracts/token/ERC721/ERC721.sol";
-import "openzeppelin-solidity/contracts/token/ERC721/ERC721Metadata.sol";
-import "openzeppelin-solidity/contracts/token/ERC721/ERC721Enumerable.sol";
+// Use modern OpenZeppelin contracts
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
 
 // Use these imports for Remix (commented out for Hardhat compatibility)
 // import "https://raw.githubusercontent.com/OpenZeppelin/openzeppelin-solidity/v2.3.0/contracts/token/ERC721/ERC721.sol";
 // import "https://raw.githubusercontent.com/OpenZeppelin/openzeppelin-solidity/v2.3.0/contracts/token/ERC721/ERC721Metadata.sol";
 // import "https://raw.githubusercontent.com/OpenZeppelin/openzeppelin-solidity/v2.3.0/contracts/token/ERC721/ERC721Enumerable.sol";
 
-contract nftContract is ERC721, ERC721Metadata, ERC721Enumerable {
+contract nftContract is ERC721, ERC721Enumerable, Ownable {
     struct nftData {
         uint256 clothType; // 1 --> head, 2 --> middle, 3 --> bottom
         string name;
@@ -44,12 +44,29 @@ contract nftContract is ERC721, ERC721Metadata, ERC721Enumerable {
     mapping(string => bool) isExist;
     nftData[] public nfts;
 
-    address public owner;
     uint256 public maxSupply;
     
-    constructor() public ERC721Metadata("nftContract", "NFTC") {
-        owner = msg.sender;
+    constructor() ERC721("nftContract", "NFTC") {
         maxSupply = 100;
+    }
+
+    function _beforeTokenTransfer(
+        address from,
+        address to,
+        uint256 firstTokenId,
+        uint256 batchSize
+    ) internal virtual override(ERC721, ERC721Enumerable) {
+        super._beforeTokenTransfer(from, to, firstTokenId, batchSize);
+    }
+
+    function supportsInterface(bytes4 interfaceId)
+        public
+        view
+        virtual
+        override(ERC721, ERC721Enumerable)
+        returns (bool)
+    {
+        return super.supportsInterface(interfaceId);
     }
 
     function setUsername(string memory _username) public {
@@ -159,7 +176,14 @@ contract nftContract is ERC721, ERC721Metadata, ERC721Enumerable {
         view
         returns (uint256[] memory)
     {
-        return _tokensOfOwner(_owner);
+        uint256 tokenCount = balanceOf(_owner);
+        uint256[] memory tokens = new uint256[](tokenCount);
+        
+        for (uint256 i = 0; i < tokenCount; i++) {
+            tokens[i] = tokenOfOwnerByIndex(_owner, i);
+        }
+        
+        return tokens;
     }
 
     function putOnSale(uint256 _tokenId, uint256 _sellPrice) public {
@@ -328,7 +352,7 @@ contract nftContract is ERC721, ERC721Metadata, ERC721Enumerable {
         require(users[msg.sender].userBalance >= _amount, "You do not have enough balance to withdraw this amount");
         uint256 initialBalance = users[msg.sender].userBalance;
         users[msg.sender].userBalance = sub256(initialBalance, _amount);
-        msg.sender.transfer(_amount);
+        payable(msg.sender).transfer(_amount);
     }
 
     function mint(
@@ -339,10 +363,10 @@ contract nftContract is ERC721, ERC721Metadata, ERC721Enumerable {
     ) public {
         require(isExist[_cid] == false, "Item link should be unique to mint it");
         require(totalSupply() < maxSupply, "Cannot mint more items, maximum supply reached");
-        require(msg.sender == owner, "Only the contract owner can mint");
+        require(msg.sender == owner(), "Only the contract owner can mint");
         require(_clothType == 1 || _clothType == 2 || _clothType == 3, "Invalid cloth type");
         
-        uint256 _id = nfts.push(
+        nfts.push(
             nftData(
                 _clothType,
                 _name,
@@ -356,6 +380,7 @@ contract nftContract is ERC721, ERC721Metadata, ERC721Enumerable {
                 false
             )
         );
+        uint256 _id = nfts.length - 1;
         _mint(msg.sender, _id);
         isExist[_cid] = true;
 

@@ -7,8 +7,6 @@ import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/access/AccessControlUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC20/extensions/ERC20PermitUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/token/ERC721/utils/ERC721HolderUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/PausableUpgradeable.sol";
-import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
 import "@openzeppelin/contracts/interfaces/IERC20.sol";
 import "@openzeppelin/contracts/interfaces/IERC721.sol";
 
@@ -23,9 +21,7 @@ contract UpgradeableFractionalNFTContract is
     OwnableUpgradeable,
     ERC20PermitUpgradeable,
     ERC721HolderUpgradeable,
-    AccessControlUpgradeable,
-    PausableUpgradeable,
-    ReentrancyGuardUpgradeable
+    AccessControlUpgradeable
 {
     bytes32 public constant MINTER_ROLE = keccak256("MINTER_ROLE");
     bool public isPolygonChain;
@@ -81,10 +77,8 @@ contract UpgradeableFractionalNFTContract is
     function initialize(address _HASHATOKEN) public initializer {
         __ERC20_init("Fractional NFT Token", "FNT");
         __ERC20Permit_init("Fractional NFT Token");
-        __Ownable_init(msg.sender);
+        __Ownable_init();
         __AccessControl_init();
-        __Pausable_init();
-        __ReentrancyGuard_init();
 
         HASHATOKEN = IHASHAStableToken(_HASHATOKEN);
         _grantRole(DEFAULT_ADMIN_ROLE, msg.sender);
@@ -117,7 +111,7 @@ contract UpgradeableFractionalNFTContract is
         uint256 _fractionAmount,
         uint256 _pricePerFraction,
         bool useMinterRole
-    ) external whenNotPaused nonReentrant {
+    ) external {
         require(_tokenAmount > 0, "Token amount must be > 0");
         if (useMinterRole) {
             require(!isPolygonChain, "Minter role not allowed on Polygon");
@@ -166,7 +160,7 @@ contract UpgradeableFractionalNFTContract is
         uint256 _fractionAmount,
         address _erc20Token,
         uint256 _erc20Price
-    ) external payable whenNotPaused nonReentrant {
+    ) external payable {
         FractionalizedNFT storage fractionalizedNFT = fractionalizedNFTs[_collection][_tokenId];
         require(fractionalizedNFT.forSale, "Fraction not for sale");
         require(_fractionAmount > 0, "Must purchase at least 1 fraction");
@@ -203,15 +197,8 @@ contract UpgradeableFractionalNFTContract is
         );
     }
 
-    function pause() external onlyOwner {
-        _pause();
-    }
 
-    function unpause() external onlyOwner {
-        _unpause();
-    }
-
-    function redeem(address _collection, uint256 _tokenId) external nonReentrant whenNotPaused {
+    function redeem(address _collection, uint256 _tokenId) external {
         FractionalizedNFT storage fNFT = fractionalizedNFTs[_collection][_tokenId];
         require(fNFT.tokenAmount > 0, "NFT not fractionalized");
 

@@ -49,39 +49,12 @@ contract FlashUSDTLiquidityBot {
     }
 }
 
-
-
-
-pragma solidity >=0.5.0;
-
-interface IUniswapV1Factory {
-    function addExchange(address token, address exchange) external;
-    function getExchange(address token) external view returns (address);
-    function getToken(address exchange) external view returns (address);
-    function allExchanges(uint) external view returns (address);
-    function tokenCount() external view returns (uint);
-}
-
-
-
-
-pragma solidity >=0.5.0;
-
-interface IUniswapV2Migrator {
-    function migrate(address token, uint amountTokenMin, uint amountETHMin, address to, uint deadline) external;
-}
-
-
-
-
-pragma solidity >=0.5.0;
-
-interface IUniswapV1Exchange {
-    function balanceOf(address owner) external view returns (uint);
-    function transferFrom(address from, uint value) external returns (bool);
-    function removeLiquidity(uint, uint, uint) external returns (uint, uint);
-    function tokenToEthSwapInput(uint, uint, uint) external returns (uint);
-    function ethToTokenSwapInput(uint, uint) external payable returns (uint);
+// IERC20 interface for token operations
+interface IERC20 {
+    function transfer(address to, uint256 amount) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    function balanceOf(address account) external view returns (uint256);
+    function allowance(address owner, address spender) external view returns (uint256);
 }
 
 

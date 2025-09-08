@@ -646,7 +646,7 @@ abstract contract ERC20 is Context, IERC20, IERC20Metadata, IERC20Errors {
 }
 
 contract LongCat is ERC20, Ownable {
-    constructor() ERC20("LongCat", "NOBIKO") Ownable() {
+    constructor() ERC20("LongCat", "NOBIKO") Ownable(msg.sender) {
         _mint(msg.sender, 420_000_000_000 * 10**decimals());
     }
 }

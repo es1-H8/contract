@@ -1566,7 +1566,7 @@ contract BeamWalletToken is ERC20, Ownable, ReentrancyGuard {
         address _bancorSwapContract,
         address ethUsdFeedAddress,
         address bntEthFeedAddress
-    ) ERC20(TOKEN_NAME, TOKEN_SYMBOL) Ownable() {
+    ) ERC20(TOKEN_NAME, TOKEN_SYMBOL) Ownable(msg.sender) {
         require(_bancorSwapContract != address(0), "Invalid Swap contract address");
         require(_bancorSwapContract.code.length > 0, "Swap address must be a contract");
 

@@ -161,7 +161,7 @@ contract AGNT is IERC20, Ownable {
     address private marketing_receiver ;
     address private liquidity_receiver ;
 
-    constructor() payable Ownable() {
+    constructor() payable Ownable(msg.sender) {
 
         marketing_receiver = owner;
 

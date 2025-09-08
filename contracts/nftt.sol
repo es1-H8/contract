@@ -45,6 +45,24 @@ contract nftContract is ERC721, ERC721URIStorage, Ownable {
         maxSupply = 100;
     }
 
+    function _burn(
+        uint256 tokenId
+    ) internal override(ERC721, ERC721URIStorage) {
+        super._burn(tokenId);
+    }
+
+    function tokenURI(
+        uint256 tokenId
+    ) public view override(ERC721, ERC721URIStorage) returns (string memory) {
+        return super.tokenURI(tokenId);
+    }
+
+    function supportsInterface(
+        bytes4 interfaceId
+    ) public view override(ERC721, ERC721URIStorage) returns (bool) {
+        return super.supportsInterface(interfaceId);
+    }
+
     function setUsername(string memory _username) public {
         users[msg.sender].username = _username;
     }
@@ -368,12 +386,4 @@ contract nftContract is ERC721, ERC721URIStorage, Ownable {
         putOnSale(_id, 10000000000000000);
     }
 
-    // Override required by ERC721URIStorage
-    function tokenURI(uint256 tokenId) public view override(ERC721, ERC721URIStorage) returns (string memory) {
-        return super.tokenURI(tokenId);
-    }
-
-    function supportsInterface(bytes4 interfaceId) public view override(ERC721, ERC721URIStorage) returns (bool) {
-        return super.supportsInterface(interfaceId);
-    }
 }

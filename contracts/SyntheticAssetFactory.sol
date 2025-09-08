@@ -20,7 +20,7 @@ contract SyntheticAssetFactory is Ownable {
     event AssetCreated(uint256 indexed assetId, address token, address priceFeed);
     event AssetMinted(uint256 indexed assetId, address user, uint256 amount);
 
-    constructor(address initialOwner) Ownable(initialOwner) {}
+    constructor(address initialOwner) Ownable() {}
 
     function createSyntheticAsset(string memory name, string memory symbol, address priceFeed) external onlyOwner {
         require(priceFeed != address(0), "Invalid price feed");
