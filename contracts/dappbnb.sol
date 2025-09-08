@@ -52,7 +52,7 @@ contract DappBnb is Ownable, ReentrancyGuard {
   mapping(uint => mapping(uint => bool)) isDateBooked;
   mapping(address => mapping(uint => bool)) hasBooked;
 
-  constructor(uint _taxPercent, uint _securityFee) Ownable(msg.sender) {
+  constructor(uint _taxPercent, uint _securityFee) Ownable() {
     taxPercent = _taxPercent;
     securityFee = _securityFee;
   }

@@ -41,7 +41,7 @@ contract nftContract is ERC721, ERC721URIStorage, Ownable {
 
     uint256 public maxSupply;
     
-    constructor() ERC721("nftContract", "NFTC") Ownable(msg.sender) {
+    constructor() ERC721("nftContract", "NFTC") Ownable() {
         maxSupply = 100;
     }
 

@@ -32,7 +32,7 @@ contract DerivativesPlatform is AutomationCompatible, Ownable {
     event PositionOpened(uint256 indexed positionId, address trader, uint256 collateral, bool isLong, uint256 leverage);
     event PositionClosed(uint256 indexed positionId, uint256 payout);
 
-    constructor(address _priceFeed, address _settlementToken) Ownable(msg.sender) {
+    constructor(address _priceFeed, address _settlementToken) Ownable() {
         priceFeed = AggregatorV3Interface(_priceFeed);
         settlementToken = IERC20(_settlementToken);
     }

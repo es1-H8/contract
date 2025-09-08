@@ -38,7 +38,7 @@ contract RWAMarketplace is VRFConsumerBaseV2, Ownable {
 
     constructor(address _paymentToken, uint64 _subscriptionId, address _vrfCoordinator, bytes32 _keyHash) 
         VRFConsumerBaseV2(_vrfCoordinator) 
-        Ownable(msg.sender) 
+        Ownable() 
     {
         COORDINATOR = VRFCoordinatorV2Interface(_vrfCoordinator);
         paymentToken = IERC20(_paymentToken);

@@ -35,7 +35,7 @@ contract PerpetualFutures is AutomationCompatible, Ownable {
     event PositionClosed(uint256 indexed positionId, uint256 payout);
     event FundingPaid(address indexed trader, uint256 positionId, uint256 amount);
 
-    constructor(address _priceFeed, address _marginToken) Ownable(msg.sender) {
+    constructor(address _priceFeed, address _marginToken) Ownable() {
         priceFeed = AggregatorV3Interface(_priceFeed);
         marginToken = IERC20(_marginToken);
     }

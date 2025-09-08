@@ -15,7 +15,7 @@ contract YieldFarmAutomation is AutomationCompatible, Ownable {
     mapping(address => uint256) public stakes;
     uint256 public totalStaked;
 
-    constructor(address _priceFeed, address _token) Ownable(msg.sender) {
+    constructor(address _priceFeed, address _token) Ownable() {
         priceFeed = AggregatorV3Interface(_priceFeed);
         token = _token;
     }

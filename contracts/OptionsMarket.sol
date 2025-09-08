@@ -27,7 +27,7 @@ contract OptionsMarket is Ownable {
     event OptionCreated(uint256 indexed optionId, address buyer, uint256 strikePrice, bool isCall);
     event OptionExercised(uint256 indexed optionId, uint256 payout);
 
-    constructor(address _underlyingToken, address _priceFeed) Ownable(msg.sender) {
+    constructor(address _underlyingToken, address _priceFeed) Ownable() {
         underlyingToken = IERC20(_underlyingToken);
         priceFeed = AggregatorV3Interface(_priceFeed);
     }

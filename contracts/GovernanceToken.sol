@@ -21,7 +21,7 @@ contract GovernanceToken is ERC20, Ownable {
     event Unstaked(address indexed user, uint256 amount);
     event RewardsClaimed(address indexed user, uint256 amount);
 
-    constructor(address _priceFeed) ERC20("GovernanceToken", "GOV") Ownable(msg.sender) {
+    constructor(address _priceFeed) ERC20("GovernanceToken", "GOV") Ownable() {
         priceFeed = AggregatorV3Interface(_priceFeed);
         _mint(msg.sender, 1_000_000 * 10**18); // 1M tokens
     }

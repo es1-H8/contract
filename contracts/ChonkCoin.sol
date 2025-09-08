@@ -3,7 +3,6 @@ pragma solidity ^0.8.26;
 
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/interfaces/draft-IERC6093.sol";
 
 /// @title ChonkCoin
 /// @notice An ERC-20 token with tax, liquidity, and burn fees on transfers
@@ -33,7 +32,7 @@ contract ChonkCoin is ERC20, Ownable {
 
     /// @notice Initializes the contract with an initial token supply
     /// @param initialSupply Initial token supply (without decimals)
-    constructor(uint256 initialSupply) ERC20("ChonkCoin", "CHONK") Ownable(msg.sender) {
+    constructor(uint256 initialSupply) ERC20("ChonkCoin", "CHONK") Ownable() {
         liquidityWallet = msg.sender;
         _mint(msg.sender, initialSupply * 10**decimals());
     }

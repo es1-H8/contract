@@ -86,7 +86,7 @@ contract SupplyChain is Ownable {
     event ShippedByDeliveryHub(uint256 indexed uid, address indexed deliveryHub, uint256 timestamp);
     event ReceivedByCustomer(uint256 indexed uid, address indexed customer, uint256 timestamp);
 
-    constructor() Ownable(msg.sender) {
+    constructor() Ownable() {
         // Initialize owner, sku, and uid
     }
 

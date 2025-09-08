@@ -14,7 +14,7 @@ contract PredictionMarket is AutomationCompatible, Ownable {
     uint256 public resolutionTime;
     uint256 public resolutionInterval = 1 days;
 
-    constructor(address _priceFeed) Ownable(msg.sender) {
+    constructor(address _priceFeed) Ownable() {
         priceFeed = AggregatorV3Interface(_priceFeed);
     }
 

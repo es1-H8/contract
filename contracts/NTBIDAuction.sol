@@ -127,7 +127,7 @@ contract NTBIDAuction is Ownable {
     error TokenTransferFailed();
     error AuctionAlreadyActive(uint32 auctionId);
 
-    constructor(address _bytesToken) Ownable(msg.sender) {
+    constructor(address _bytesToken) Ownable() {
         if (_bytesToken == address(0)) revert InvalidTokenAddress();
         bytesToken = IERC20(_bytesToken);
     }

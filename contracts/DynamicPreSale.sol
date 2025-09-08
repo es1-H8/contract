@@ -41,7 +41,7 @@ contract DynamicPreSale is Ownable {
     event Purchased(address indexed buyer, uint256 purchaseId, uint256 amount, uint256 phaseId, address referrer);
     event ReferralRewardClaimed(address indexed referrer, uint256 amount);
 
-    constructor(address _saleToken, address _priceFeed) Ownable(msg.sender) {
+    constructor(address _saleToken, address _priceFeed) Ownable() {
         saleToken = IERC20(_saleToken);
         priceFeed = AggregatorV3Interface(_priceFeed);
     }

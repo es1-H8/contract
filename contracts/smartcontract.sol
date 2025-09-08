@@ -20,7 +20,7 @@ contract TheBeeCollaborative is ERC721Enumerable, Ownable {
         string memory _name,
         string memory _symbol,
         string memory _initBaseURI
-    ) ERC721(_name, _symbol) Ownable(msg.sender) {
+    ) ERC721(_name, _symbol) Ownable() {
         setBaseURI(_initBaseURI);
         mint(msg.sender, 10);
     }

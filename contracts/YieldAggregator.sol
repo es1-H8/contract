@@ -30,7 +30,7 @@ contract YieldAggregator is AutomationCompatibleInterface, Ownable {
     event Rebalance(uint256 indexed strategyId, uint256 amount);
     event FeesHarvested(uint256 indexed strategyId, uint256 feeAmount);
 
-    constructor(address _depositToken) Ownable(msg.sender) {
+    constructor(address _depositToken) Ownable() {
         require(_depositToken != address(0), "Invalid token address");
         depositToken = IERC20(_depositToken);
     }

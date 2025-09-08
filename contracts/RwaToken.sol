@@ -40,7 +40,7 @@ contract RAWToken is ERC20, Ownable, ChainlinkClient {
     event OracleUpdated(address oracle, bytes32 jobId, uint256 fee);
     event AuthorizedOracle(address oracle, bool status);
 
-    constructor(address _link) ERC20("RealFiat RAW Token", "RAW") Ownable(msg.sender) {
+    constructor(address _link) ERC20("RealFiat RAW Token", "RAW") Ownable() {
         _setChainlinkToken(_link);
         _mint(msg.sender, 0);
     }

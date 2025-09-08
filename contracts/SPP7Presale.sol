@@ -30,7 +30,7 @@ contract SPP7Presale is Ownable, ReentrancyGuard {
     constructor(
         address _token,
         address _presaleWallet
-    ) Ownable(msg.sender) {
+    ) Ownable() {
         require(_token != address(0), "Invalid token address");
         require(_presaleWallet != address(0), "Invalid wallet address");
         

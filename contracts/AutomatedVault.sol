@@ -28,7 +28,7 @@ contract AutomatedVault is AutomationCompatible, Ownable {
     event StrategyAdded(uint256 indexed strategyId, address protocol, uint256 apy);
     event Rebalanced(uint256 indexed strategyId, uint256 amount);
 
-    constructor(address _depositToken) Ownable(msg.sender) {
+    constructor(address _depositToken) Ownable() {
         depositToken = IERC20(_depositToken);
     }
 
