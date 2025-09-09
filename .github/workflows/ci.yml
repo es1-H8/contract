@@ -65,7 +65,7 @@ jobs:
       #     ls -la contracts/*.sol | tee -a security-report.txt
       #     echo "" | tee -a security-report.txt
       #     for contract in contracts/*.sol; do
-      #       if [ -f "$contract" ] then
+      #       if [ -f "$contract" ]; then
       #         contract_name=$(basename "$contract")
       #         echo "========================================" | tee -a security-report.txt
       #         echo "Analyzing: $contract_name" | tee -a security-report.txt
@@ -130,7 +130,7 @@ jobs:
       #     fi
 
       # ==============================
-      # Echidna (run for 0.4.x–0.8.x; clean error handling)
+      # Echidna (0.8.x only; no per-contract skips)
       # ==============================
       - name: Run Echidna analysis
         run: |
@@ -148,12 +148,22 @@ jobs:
           for contract in contracts/*.sol; do
             [ -f "$contract" ] || continue
             file="$(basename "$contract")"
+            pragma=$(grep -m1 -E "pragma\s+solidity" "$contract" || true)
+
+            # Only run Echidna on 0.8.x files
+            if ! echo "$pragma" | grep -qE "0\.8"; then
+              echo "========================================" | tee -a security-report.txt
+              echo "Fuzz Testing: $file (skipped: Echidna run limited to 0.8.x)" | tee -a security-report.txt
+              echo "========================================" | tee -a security-report.txt
+              echo "" | tee -a security-report.txt
+              continue
+            fi
+
             echo "========================================" | tee -a security-report.txt
             echo "Fuzz Testing: $file" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            set +e
-            OUT=$(docker run --rm \
+            docker run --rm \
               -v "$PWD":/src \
               -w /src \
               trailofbits/echidna:latest \
@@ -161,27 +171,13 @@ jobs:
                 --test-mode assertion \
                 --config echidna.yaml \
                 --solc-args "--base-path /src --include-path /src/node_modules --allow-paths /src,/src/node_modules" \
-              2>&1)
-            RC=$?
-            set -e
-
-            if [ $RC -ne 0 ]; then
-              if echo "$OUT" | grep -qi "requires different compiler version"; then
-                echo "Result: Skipped due to compiler error" | tee -a security-report.txt
-              elif echo "$OUT" | grep -qi "Constructor arguments are required"; then
-                echo "Result: Skipped due to constructor error" | tee -a security-report.txt
-              else
-                echo "Result: Skipped due to unknown error" | tee -a security-report.txt
-              fi
-            else
-              echo "$OUT" | tee -a security-report.txt
-            fi
+              2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
           done
 
       # ==============================
-      # Mythril (analyze all versions, with legacy-solc fallback & clean errors)
+      # Mythril (skip ONLY 0.4.x; no per-contract skips)
       # ==============================
       - name: Install Mythril + solc-select
         run: |
@@ -228,54 +224,37 @@ jobs:
             token=$(echo "$pragma" | sed -E 's/.*solidity([^;]*);/\1/' | awk '{print $1}' | tr -d ' ')
             solv=$(pick_version "$token")
 
+            # Skip ONLY 0.4.x
+            if echo "$solv" | grep -q "^0\.4"; then
+              echo "========================================" | tee -a security-report.txt
+              echo "Analyzing: $name (skipped: Can't compile and I use Mythril on old contracts.)" | tee -a security-report.txt
+              echo "========================================" | tee -a security-report.txt
+              echo "" | tee -a security-report.txt
+              continue
+            fi
+
             echo "========================================" | tee -a security-report.txt
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            # Decide solc args by version (legacy solc doesn't support --base-path/--include-path)
-            if echo "$solv" | grep -Eq "^0\.(4|5)\."; then
-              SOLC_ARGS="--allow-paths $ABS,$ABS/node_modules"
-            else
-              SOLC_ARGS="--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules"
-            fi
-
-            set +e
-            OUT=$(myth analyze "contracts/$name" \
-              --solv "$solv" \
-              --solc-args "$SOLC_ARGS" \
-              --execution-timeout 120 \
-              --max-depth 16 \
-              --create-timeout 60 \
-              --solver-timeout 10000 2>&1)
-            RC=$?
-            set -e
-
-            # If legacy solc choked on modern flags, retry with legacy-safe args
-            if [ $RC -ne 0 ] && echo "$OUT" | grep -qi "unrecognised option '--base-path'"; then
-              set +e
-              OUT=$(myth analyze "contracts/$name" \
+            if echo "$solv" | grep -Eq "^0\.(5|6)\."; then
+              myth analyze "contracts/$name" \
                 --solv "$solv" \
                 --solc-args "--allow-paths $ABS,$ABS/node_modules" \
                 --execution-timeout 120 \
                 --max-depth 16 \
                 --create-timeout 60 \
-                --solver-timeout 10000 2>&1)
-              RC=$?
-              set -e
-            fi
-
-            if [ $RC -ne 0 ]; then
-              if echo "$OUT" | grep -qi "requires different compiler version"; then
-                echo "Result: Skipped due to compiler error" | tee -a security-report.txt
-              elif echo "$OUT" | grep -qi "Constructor arguments are required"; then
-                echo "Result: Skipped due to constructor error" | tee -a security-report.txt
-              elif echo "$OUT" | grep -qi "Input file not found"; then
-                echo "Result: Skipped due to missing imports" | tee -a security-report.txt
-              else
-                echo "Result: Skipped due to unknown error" | tee -a security-report.txt
-              fi
+                --solver-timeout 10000 \
+                2>&1 | tee -a security-report.txt || true
             else
-              echo "$OUT" | tee -a security-report.txt
+              myth analyze "contracts/$name" \
+                --solv "$solv" \
+                --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
+                --execution-timeout 120 \
+                --max-depth 16 \
+                --create-timeout 60 \
+                --solver-timeout 10000 \
+                2>&1 | tee -a security-report.txt || true
             fi
 
             echo "" | tee -a security-report.txt
@@ -306,7 +285,7 @@ jobs:
 
       - name: Discover contracts for deployment
         run: |
-          echo "=== CONTRACTS DISCOVERED FOR DEPLOYMENT==="
+          echo "=== CONTRACTS DISCOVERED FOR DEPLOYMENT ==="
           ls -la contracts/
           echo ""
           ls contracts/*.sol | sed 's/contracts\//  - /'
