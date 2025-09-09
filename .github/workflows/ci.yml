@@ -207,17 +207,15 @@ jobs:
 
           # Create comprehensive remappings for Mythril
           echo "Creating remappings.txt for Mythril..."
-          cat > remappings.txt << 'EOF'
-@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/
-@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/
-@chainlink/contracts/=node_modules/@chainlink/contracts/
-@pythnetwork/pyth-sdk-solidity/=node_modules/@pythnetwork/pyth-sdk-solidity/
-erc721a/=node_modules/erc721a/
-@uniswap/v2-periphery/=node_modules/@uniswap/v2-periphery/
-zeppelin-solidity/=node_modules/zeppelin-solidity/
-openzeppelin-solidity/=node_modules/openzeppelin-solidity/
-hardhat/=node_modules/hardhat/
-EOF
+          echo "@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/" > remappings.txt
+          echo "@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/" >> remappings.txt
+          echo "@chainlink/contracts/=node_modules/@chainlink/contracts/" >> remappings.txt
+          echo "@pythnetwork/pyth-sdk-solidity/=node_modules/@pythnetwork/pyth-sdk-solidity/" >> remappings.txt
+          echo "erc721a/=node_modules/erc721a/" >> remappings.txt
+          echo "@uniswap/v2-periphery/=node_modules/@uniswap/v2-periphery/" >> remappings.txt
+          echo "zeppelin-solidity/=node_modules/zeppelin-solidity/" >> remappings.txt
+          echo "openzeppelin-solidity/=node_modules/openzeppelin-solidity/" >> remappings.txt
+          echo "hardhat/=node_modules/hardhat/" >> remappings.txt
 
           echo "Remappings created:"
           cat remappings.txt
