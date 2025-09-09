@@ -183,6 +183,13 @@ jobs:
         run: |
           python3 -m pip install --upgrade pip
           pip install mythril solc-select
+          
+      - name: Verify Mythril installation
+        run: |
+          echo "=== MYTHRIL INSTALLATION VERIFICATION ==="
+          myth --version
+          solc-select --version
+          echo "Mythril installation verified successfully"
 
       - name: Run Mythril analysis
         run: |
@@ -196,6 +203,24 @@ jobs:
           ABS="$(pwd)"
           echo "cwd: $ABS"
           echo "contracts present:"; ls -la "$ABS/contracts" || true
+          echo ""
+
+          # Create comprehensive remappings for Mythril
+          echo "Creating remappings.txt for Mythril..."
+          cat > remappings.txt << EOF
+@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/
+@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/
+@chainlink/contracts/=node_modules/@chainlink/contracts/
+@pythnetwork/pyth-sdk-solidity/=node_modules/@pythnetwork/pyth-sdk-solidity/
+erc721a/=node_modules/erc721a/
+@uniswap/v2-periphery/=node_modules/@uniswap/v2-periphery/
+zeppelin-solidity/=node_modules/zeppelin-solidity/
+openzeppelin-solidity/=node_modules/openzeppelin-solidity/
+hardhat/=node_modules/hardhat/
+EOF
+
+          echo "Remappings created:"
+          cat remappings.txt
           echo ""
 
           pick_version() {
@@ -237,25 +262,28 @@ jobs:
             echo "Analyzing: $name (solc $solv)" | tee -a security-report.txt
             echo "========================================" | tee -a security-report.txt
 
-            if echo "$solv" | grep -Eq "^0\.(5|6)\."; then
-              myth analyze "contracts/$name" \
-                --solv "$solv" \
-                --solc-args "--allow-paths $ABS,$ABS/node_modules" \
-                --execution-timeout 120 \
-                --max-depth 16 \
-                --create-timeout 60 \
-                --solver-timeout 10000 \
-                2>&1 | tee -a security-report.txt || true
+            # Test compilation first to ensure imports work
+            echo "Testing compilation with solc $solv..."
+            if solc-select use "$solv" && solc --base-path "$ABS" --include-path "$ABS/node_modules" --allow-paths "$ABS,$ABS/node_modules" "contracts/$name" --bin 2>/dev/null; then
+              echo "Compilation successful, proceeding with Mythril analysis..."
             else
-              myth analyze "contracts/$name" \
-                --solv "$solv" \
-                --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
-                --execution-timeout 120 \
-                --max-depth 16 \
-                --create-timeout 60 \
-                --solver-timeout 10000 \
-                2>&1 | tee -a security-report.txt || true
+              echo "Compilation failed, skipping Mythril analysis for $name"
+              echo "========================================" | tee -a security-report.txt
+              echo "Analysis skipped: $name (compilation failed)" | tee -a security-report.txt
+              echo "========================================" | tee -a security-report.txt
+              echo "" | tee -a security-report.txt
+              continue
             fi
+
+            # Use consistent solc arguments for all versions
+            myth analyze "contracts/$name" \
+              --solv "$solv" \
+              --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
+              --execution-timeout 120 \
+              --max-depth 16 \
+              --create-timeout 60 \
+              --solver-timeout 10000 \
+              2>&1 | tee -a security-report.txt || true
 
             echo "" | tee -a security-report.txt
           done

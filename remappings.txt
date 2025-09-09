@@ -1,7 +1,9 @@
-@openzeppelin/=node_modules/@openzeppelin/
-@chainlink/=node_modules/@chainlink/
-@pythnetwork/=node_modules/@pythnetwork/
+@openzeppelin/contracts/=node_modules/@openzeppelin/contracts/
+@openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/
+@chainlink/contracts/=node_modules/@chainlink/contracts/
+@pythnetwork/pyth-sdk-solidity/=node_modules/@pythnetwork/pyth-sdk-solidity/
 erc721a/=node_modules/erc721a/
-@uniswap/=node_modules/@uniswap/
+@uniswap/v2-periphery/=node_modules/@uniswap/v2-periphery/
 zeppelin-solidity/=node_modules/zeppelin-solidity/
 openzeppelin-solidity/=node_modules/openzeppelin-solidity/
+hardhat/=node_modules/hardhat/
