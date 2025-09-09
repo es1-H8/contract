@@ -207,7 +207,7 @@ jobs:
 
           # Create comprehensive remappings for Mythril
           echo "Creating remappings.txt for Mythril..."
-          cat > remappings.txt << EOF
+          cat > remappings.txt << 'EOF'
 @openzeppelin/contracts/=node_modules/@openzeppelin/contracts/
 @openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/
 @chainlink/contracts/=node_modules/@chainlink/contracts/
