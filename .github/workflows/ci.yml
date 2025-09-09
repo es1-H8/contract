@@ -187,7 +187,7 @@ jobs:
       - name: Verify Mythril installation
         run: |
           echo "=== MYTHRIL INSTALLATION VERIFICATION ==="
-          myth --version
+          myth version
           solc-select --version
           echo "Mythril installation verified successfully"
 
