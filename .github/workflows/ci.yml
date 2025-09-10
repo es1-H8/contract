@@ -273,10 +273,10 @@ jobs:
               continue
             fi
 
-            # Use consistent solc arguments for all versions
+            # Use consistent solc arguments for all versions with remappings
             myth analyze "contracts/$name" \
               --solv "$solv" \
-              --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
+              --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules --import-remappings @openzeppelin/contracts/=node_modules/@openzeppelin/contracts/ @openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/ @chainlink/contracts/=node_modules/@chainlink/contracts/ @pythnetwork/pyth-sdk-solidity/=node_modules/@pythnetwork/pyth-sdk-solidity/ erc721a/=node_modules/erc721a/ @uniswap/v2-periphery/=node_modules/@uniswap/v2-periphery/ zeppelin-solidity/=node_modules/zeppelin-solidity/ openzeppelin-solidity/=node_modules/openzeppelin-solidity/ hardhat/=node_modules/hardhat/" \
               --execution-timeout 120 \
               --max-depth 16 \
               --create-timeout 60 \
