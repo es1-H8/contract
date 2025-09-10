@@ -279,15 +279,45 @@ jobs:
               fi
             fi
 
-            # Use standard solc arguments with proper include paths
-            myth analyze "contracts/$name" \
+            # Create a temporary directory with resolved imports for Mythril
+            echo "Creating temporary directory with resolved imports for $name..."
+            TEMP_DIR="temp_mythril_${name}"
+            mkdir -p "$TEMP_DIR"
+            
+            # Copy the contract to temp directory
+            cp "contracts/$name" "$TEMP_DIR/"
+            
+            # Create symbolic links for all dependencies
+            mkdir -p "$TEMP_DIR/@openzeppelin"
+            mkdir -p "$TEMP_DIR/@chainlink"
+            mkdir -p "$TEMP_DIR/@pythnetwork"
+            mkdir -p "$TEMP_DIR/@uniswap"
+            mkdir -p "$TEMP_DIR/erc721a"
+            mkdir -p "$TEMP_DIR/zeppelin-solidity"
+            mkdir -p "$TEMP_DIR/openzeppelin-solidity"
+            mkdir -p "$TEMP_DIR/hardhat"
+            
+            ln -sf "$ABS/node_modules/@openzeppelin/contracts" "$TEMP_DIR/@openzeppelin/contracts"
+            ln -sf "$ABS/node_modules/@openzeppelin/contracts-upgradeable" "$TEMP_DIR/@openzeppelin/contracts-upgradeable"
+            ln -sf "$ABS/node_modules/@chainlink/contracts" "$TEMP_DIR/@chainlink/contracts"
+            ln -sf "$ABS/node_modules/@pythnetwork/pyth-sdk-solidity" "$TEMP_DIR/@pythnetwork/pyth-sdk-solidity"
+            ln -sf "$ABS/node_modules/erc721a" "$TEMP_DIR/erc721a"
+            ln -sf "$ABS/node_modules/@uniswap/v2-periphery" "$TEMP_DIR/@uniswap/v2-periphery"
+            ln -sf "$ABS/node_modules/zeppelin-solidity" "$TEMP_DIR/zeppelin-solidity"
+            ln -sf "$ABS/node_modules/openzeppelin-solidity" "$TEMP_DIR/openzeppelin-solidity"
+            ln -sf "$ABS/node_modules/hardhat" "$TEMP_DIR/hardhat"
+
+            # Use Mythril on the temporary directory
+            myth analyze "$TEMP_DIR/$name" \
               --solv "$solv" \
-              --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
               --execution-timeout 120 \
               --max-depth 16 \
               --create-timeout 60 \
               --solver-timeout 10000 \
               2>&1 | tee -a security-report.txt || true
+
+            # Clean up temporary directory
+            rm -rf "$TEMP_DIR"
 
             echo "" | tee -a security-report.txt
           done
