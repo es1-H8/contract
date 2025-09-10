@@ -289,10 +289,19 @@ jobs:
             
             # Create the full directory structure and copy all dependencies
             echo "Setting up import structure..."
+            echo "Checking source node_modules directories..."
+            ls -la "$ABS/node_modules/@openzeppelin/" 2>/dev/null || echo "OpenZeppelin not found in node_modules"
+            ls -la "$ABS/node_modules/@chainlink/" 2>/dev/null || echo "Chainlink not found in node_modules"
+            echo ""
             
             # OpenZeppelin contracts
             mkdir -p "$TEMP_DIR/@openzeppelin/contracts"
-            cp -r "$ABS/node_modules/@openzeppelin/contracts"/* "$TEMP_DIR/@openzeppelin/contracts/" 2>/dev/null || true
+            if [ -d "$ABS/node_modules/@openzeppelin/contracts" ]; then
+              echo "Copying OpenZeppelin contracts..."
+              cp -r "$ABS/node_modules/@openzeppelin/contracts"/* "$TEMP_DIR/@openzeppelin/contracts/" 2>/dev/null || true
+            else
+              echo "OpenZeppelin contracts directory not found!"
+            fi
             
             # OpenZeppelin contracts-upgradeable
             mkdir -p "$TEMP_DIR/@openzeppelin/contracts-upgradeable"
@@ -326,7 +335,19 @@ jobs:
             mkdir -p "$TEMP_DIR/hardhat"
             cp -r "$ABS/node_modules/hardhat"/* "$TEMP_DIR/hardhat/" 2>/dev/null || true
 
-            echo "Import structure created, running Mythril analysis..."
+            echo "Import structure created, verifying files..."
+            # Debug: Check what files were actually copied
+            echo "Files in temp directory:"
+            find "$TEMP_DIR" -name "*.sol" | head -10
+            echo ""
+            echo "Checking specific OpenZeppelin files:"
+            ls -la "$TEMP_DIR/@openzeppelin/contracts/token/ERC20/" 2>/dev/null || echo "ERC20 directory not found"
+            ls -la "$TEMP_DIR/@openzeppelin/contracts/utils/" 2>/dev/null || echo "Utils directory not found"
+            echo ""
+            echo "Checking Chainlink files:"
+            ls -la "$TEMP_DIR/@chainlink/contracts/src/v0.8/interfaces/" 2>/dev/null || echo "Chainlink interfaces not found"
+            echo ""
+            
             # Use Mythril on the temporary directory
             myth analyze "$TEMP_DIR/$name" \
               --solv "$solv" \
