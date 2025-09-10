@@ -265,18 +265,24 @@ jobs:
             if solc-select use "$solv" && solc --base-path "$ABS" --include-path "$ABS/node_modules" --allow-paths "$ABS,$ABS/node_modules" "contracts/$name" --bin 2>/dev/null; then
               echo "Compilation successful, proceeding with Mythril analysis..."
             else
-              echo "Compilation failed, skipping Mythril analysis for $name"
-              echo "========================================" | tee -a security-report.txt
-              echo "Analysis skipped: $name (compilation failed)" | tee -a security-report.txt
-              echo "========================================" | tee -a security-report.txt
-              echo "" | tee -a security-report.txt
-              continue
+              echo "Compilation failed, trying with remappings file..."
+              # Try with remappings file as fallback
+              if solc --base-path "$ABS" --include-path "$ABS/node_modules" --allow-paths "$ABS,$ABS/node_modules" "contracts/$name" --bin 2>/dev/null; then
+                echo "Compilation successful with remappings, proceeding with Mythril analysis..."
+              else
+                echo "Compilation failed, skipping Mythril analysis for $name"
+                echo "========================================" | tee -a security-report.txt
+                echo "Analysis skipped: $name (compilation failed)" | tee -a security-report.txt
+                echo "========================================" | tee -a security-report.txt
+                echo "" | tee -a security-report.txt
+                continue
+              fi
             fi
 
-            # Use consistent solc arguments for all versions with remappings
+            # Use standard solc arguments with proper include paths
             myth analyze "contracts/$name" \
               --solv "$solv" \
-              --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules --import-remappings @openzeppelin/contracts/=node_modules/@openzeppelin/contracts/ @openzeppelin/contracts-upgradeable/=node_modules/@openzeppelin/contracts-upgradeable/ @chainlink/contracts/=node_modules/@chainlink/contracts/ @pythnetwork/pyth-sdk-solidity/=node_modules/@pythnetwork/pyth-sdk-solidity/ erc721a/=node_modules/erc721a/ @uniswap/v2-periphery/=node_modules/@uniswap/v2-periphery/ zeppelin-solidity/=node_modules/zeppelin-solidity/ openzeppelin-solidity/=node_modules/openzeppelin-solidity/ hardhat/=node_modules/hardhat/" \
+              --solc-args "--base-path $ABS --include-path $ABS/node_modules --allow-paths $ABS,$ABS/node_modules" \
               --execution-timeout 120 \
               --max-depth 16 \
               --create-timeout 60 \
