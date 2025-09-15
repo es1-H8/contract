@@ -30,7 +30,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-         sudo apt-get install -y python3 python3-venv jq
+          sudo apt-get install -y python3 python3-venv jq
           # Install Docker without containerd conflict
           sudo apt-get remove -y containerd || true
           sudo apt-get install -y docker.io
