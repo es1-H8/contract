@@ -17,16 +17,8 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # Optional: you can remove this. Caching /var/lib/docker is large and flaky on GH runners.
-      # - name: Cache Docker layers (not recommended)
-      #   uses: actions/cache@v4
-      #   with:
-      #     path: /var/lib/docker
-      #     key: ${{ runner.os }}-docker-${{ github.sha }}
-      #     restore-keys: |
-      #       ${{ runner.os }}-docker-
-
-      - name: Install minimal deps (no Docker here)
+      # Install Python + jq (Docker already exists on runner)
+      - name: Install minimal deps
         run: |
           sudo apt-get update
           sudo apt-get install -y python3 python3-venv jq
@@ -42,12 +34,15 @@ jobs:
           cd smartbugs
           python3 -m venv .venv
           . .venv/bin/activate
-          pip install -r requirements.txt
+          # detect runner Python version (e.g., 3.12)
+          PYVER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+          REQFILE="install/requirements-$PYVER.txt"
+          echo "Using $REQFILE"
+          pip install -r "$REQFILE"
 
       - name: Run SmartBugs (Slither + Mythril + Semgrep) on contracts
         working-directory: smartbugs
         env:
-          # Optional: increase Docker pull reliability
           DOCKER_BUILDKIT: 0
         run: |
           . .venv/bin/activate
