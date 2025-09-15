@@ -7,7 +7,7 @@ on:
 
 permissions:
   contents: read
-  security-events: write   # needed to upload SARIF to GitHub code scanning
+  security-events: write
 
 jobs:
   analyze:
@@ -17,23 +17,24 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
+      # Optional: you can remove this. Caching /var/lib/docker is large and flaky on GH runners.
+      # - name: Cache Docker layers (not recommended)
+      #   uses: actions/cache@v4
+      #   with:
+      #     path: /var/lib/docker
+      #     key: ${{ runner.os }}-docker-${{ github.sha }}
+      #     restore-keys: |
+      #       ${{ runner.os }}-docker-
 
-      # Optional: cache Docker layers for faster SmartBugs runs
-      - name: Cache Docker layers
-        uses: actions/cache@v4
-        with:
-          path: /var/lib/docker
-          key: ${{ runner.os }}-docker-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-docker-
-
-      - name: Install dependencies
+      - name: Install minimal deps (no Docker here)
         run: |
           sudo apt-get update
           sudo apt-get install -y python3 python3-venv jq
-          # Install Docker without containerd conflict
-          sudo apt-get remove -y containerd || true
-          sudo apt-get install -y docker.io
+
+      - name: Show Docker version (preinstalled on runner)
+        run: |
+          docker version
+          docker info
 
       - name: Fetch SmartBugs
         run: |
@@ -45,10 +46,14 @@ jobs:
 
       - name: Run SmartBugs (Slither + Mythril + Semgrep) on contracts
         working-directory: smartbugs
+        env:
+          # Optional: increase Docker pull reliability
+          DOCKER_BUILDKIT: 0
         run: |
           . .venv/bin/activate
-          # adjust the glob path to your contracts
-          ./smartbugs -t slither,mythril,semgrep -f ../contracts/*.sol --timeout 600 --sarif --runid github
+          # Adjust the glob if your contracts are in a different folder structure
+          ./smartbugs -t slither,mythril,semgrep -f ../contracts/*.sol \
+            --timeout 600 --sarif --runid github
           mkdir -p ../sarif
           find results -name "*.sarif" -exec cp {} ../sarif/ \;
 
