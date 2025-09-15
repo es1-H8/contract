@@ -32,8 +32,8 @@ jobs:
         run: |
           git clone --depth 1 https://github.com/smartbugs/smartbugs
           cd smartbugs
-          python3 -m venv .venv
-          . .venv/bin/activate
+          python3 -m venv venv
+          . venv/bin/activate
           # detect runner Python version (e.g., 3.12)
           PYVER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
           REQFILE="install/requirements-$PYVER.txt"
@@ -45,10 +45,11 @@ jobs:
         env:
           DOCKER_BUILDKIT: 0
         run: |
-          . .venv/bin/activate
-          # Adjust the glob if your contracts are in a different folder structure
-          ./smartbugs -t slither,mythril,semgrep -f ../contracts/*.sol \
-            --timeout 600 --sarif --runid github
+          . venv/bin/activate
+          # Run each tool separately to avoid configuration issues
+          ./smartbugs -t slither -f ../contracts/*.sol --timeout 600 --sarif --runid github-slither
+          ./smartbugs -t mythril -f ../contracts/*.sol --timeout 600 --sarif --runid github-mythril  
+          ./smartbugs -t semgrep -f ../contracts/*.sol --timeout 600 --sarif --runid github-semgrep
           mkdir -p ../sarif
           find results -name "*.sarif" -exec cp {} ../sarif/ \;
 
