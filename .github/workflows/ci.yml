@@ -53,7 +53,17 @@ jobs:
           mkdir -p ../sarif
           find results -name "*.sarif" -exec cp {} ../sarif/ \;
 
+      # ✅ Debug step to check SARIF files
+      - name: Debug SARIF output
+        run: |
+          echo "=== SARIF files generated ==="
+          ls -lh sarif || true
+          for f in sarif/*.sarif; do
+            echo "---- $f ----"
+            head -n 50 $f || true
+          done
+
       - name: Upload SARIF to Code Scanning
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: sarif
+          sarif_file: sarif/
