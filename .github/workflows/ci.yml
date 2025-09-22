@@ -1,4 +1,4 @@
-try this! name: smartbugs
+name: smartbugs
 on:
   pull_request:
   push:
