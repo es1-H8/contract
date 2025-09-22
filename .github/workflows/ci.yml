@@ -1,5 +1,4 @@
-name: smartbugs
-
+try this! name: smartbugs
 on:
   pull_request:
   push:
@@ -7,7 +6,8 @@ on:
 
 permissions:
   contents: read
-  security-events: write
+  security-events: write   # required for SARIF upload
+  actions: read
 
 jobs:
   analyze:
@@ -17,53 +17,54 @@ jobs:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      # Install Python + jq (Docker already exists on runner)
       - name: Install minimal deps
         run: |
           sudo apt-get update
           sudo apt-get install -y python3 python3-venv jq
 
-      - name: Show Docker version (preinstalled on runner)
-        run: |
-          docker version
-          docker info
-
       - name: Fetch SmartBugs
         run: |
           git clone --depth 1 https://github.com/smartbugs/smartbugs
           cd smartbugs
-          python3 -m venv venv
-          . venv/bin/activate
-          # detect runner Python version (e.g., 3.12)
-          PYVER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
-          REQFILE="install/requirements-$PYVER.txt"
-          echo "Using $REQFILE"
-          pip install -r "$REQFILE"
+          python3 -m venv .venv
+          . .venv/bin/activate
+          pip install -r requirements.txt
 
-      - name: Run SmartBugs (Slither + Mythril + Semgrep) on contracts
+      # 👉 Adjust the glob to where your .sol files actually live
+      - name: Run SmartBugs (Slither + Mythril + Semgrep)
         working-directory: smartbugs
-        env:
-          DOCKER_BUILDKIT: 0
         run: |
-          . venv/bin/activate
-          # Run each tool separately to avoid configuration issues
-          ./smartbugs -t slither -f ../contracts/*.sol --timeout 600 --sarif --runid github-slither
-          ./smartbugs -t mythril -f ../contracts/*.sol --timeout 600 --sarif --runid github-mythril  
-          ./smartbugs -t semgrep -f ../contracts/*.sol --timeout 600 --sarif --runid github-semgrep
+          set -euxo pipefail
+          . .venv/bin/activate
           mkdir -p ../sarif
-          find results -name "*.sarif" -exec cp {} ../sarif/ \;
 
-      # ✅ Debug step to check SARIF files
-      - name: Debug SARIF output
-        run: |
-          echo "=== SARIF files generated ==="
-          ls -lh sarif || true
-          for f in sarif/*.sarif; do
+          # Run SmartBugs and request SARIF outputs
+          # (if your version doesn't support --sarif directly, SmartBugs will still
+          # create tool-specific SARIF in results/; we’ll collect them below)
+          ./smartbugs -t slither,mythril,semgrep -f ../contracts/**/*.sol --timeout 600 --sarif || true
+
+          echo "=== Collect SARIF files into ../sarif ==="
+          # SmartBugs writes into ./results/<tool>/<contract>.sarif
+          find results -type f -name "*.sarif" -print -exec cp {} ../sarif/ \;
+
+          echo "=== Short listing of collected SARIF ==="
+          ls -lh ../sarif || true
+          for f in ../sarif/*.sarif; do
             echo "---- $f ----"
-            head -n 50 $f || true
+            head -n 25 "$f" || true
           done
 
       - name: Upload SARIF to Code Scanning
         uses: github/codeql-action/upload-sarif@v3
         with:
-          sarif_file: sarif/
+          # You can point to a directory; the action will ingest all SARIF files in it
+          sarif_file: sarif
+
+      # Optional but super helpful for debugging / offline viewing
+      - name: Upload SmartBugs raw results (artifact)
+        uses: actions/upload-artifact@v4
+        with:
+          name: smartbugs-results
+          path: |
+            smartbugs/results
+            sarif
