@@ -6,65 +6,103 @@ on:
 
 permissions:
   contents: read
-  security-events: write   # required for SARIF upload
-  actions: read
+  security-events: write
 
 jobs:
   analyze:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
 
-      - name: Install minimal deps
+      - name: Install deps
         run: |
+          set -euxo pipefail
           sudo apt-get update
-          sudo apt-get install -y python3 python3-venv jq
+          sudo apt-get install -y python3 python3-venv python3-pip jq tree
 
-      - name: Fetch SmartBugs
+      - name: Fetch & install SmartBugs (robust)
         run: |
+          set -euxo pipefail
           git clone --depth 1 https://github.com/smartbugs/smartbugs
           cd smartbugs
           python3 -m venv .venv
           . .venv/bin/activate
-          pip install -r requirements.txt
 
-      # 👉 Adjust the glob to where your .sol files actually live
-      - name: Run SmartBugs (Slither + Mythril + Semgrep)
+          # Try modern install first; fall back if needed
+          if [ -f pyproject.toml ]; then
+            pip install .
+          elif [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            # Fallback to PyPI package if repo layout changed
+            pip install smartbugs || pip install smartbugs-framework || true
+          fi
+
+          # show sb version if available
+          (smartbugs --version || ./smartbugs --version || true) || true
+
+      - name: Detect Solidity files
+        id: detect
+        run: |
+          set -euxo pipefail
+          echo "=== WORKSPACE TREE (top) ==="
+          tree -a -L 2 || true
+
+          # Collect common Solidity locations
+          SOL_LIST=$( (git ls-files '*.sol' || true) )
+          if [ -z "$SOL_LIST" ]; then
+            # Fallback scan (in case git ls-files misses untracked files)
+            SOL_LIST=$(find . -type f -name "*.sol" | sed 's|^\./||')
+          fi
+
+          echo "Found Solidity files:"
+          echo "$SOL_LIST" | sed 's/^/ - /'
+
+          if [ -z "$SOL_LIST" ]; then
+            echo "::error::No Solidity files found. Check your repo paths (contracts/ or src/)."
+            exit 1
+          fi
+
+          # Persist a newline-separated list for the next step
+          printf "%s\n" "$SOL_LIST" > sol_targets.txt
+
+      - name: Run SmartBugs on detected files
         working-directory: smartbugs
         run: |
           set -euxo pipefail
           . .venv/bin/activate
+
           mkdir -p ../sarif
+          # Build an argument list of relative paths from SmartBugs' cwd.
+          # We’re in smartbugs/, repo root is one level up.
+          TARGETS=$(sed 's|^|../|' ../sol_targets.txt | tr '\n' ' ')
+          echo "TARGETS: ${TARGETS}"
 
-          # Run SmartBugs and request SARIF outputs
-          # (if your version doesn't support --sarif directly, SmartBugs will still
-          # create tool-specific SARIF in results/; we’ll collect them below)
-          ./smartbugs -t slither,mythril,semgrep -f ../contracts/**/*.sol --timeout 600 --sarif || true
+          # Prefer the installed entrypoint, fall back to local script
+          SB="smartbugs"
+          command -v smartbugs >/dev/null 2>&1 || SB="./smartbugs"
 
-          echo "=== Collect SARIF files into ../sarif ==="
-          # SmartBugs writes into ./results/<tool>/<contract>.sarif
-          find results -type f -name "*.sarif" -print -exec cp {} ../sarif/ \;
+          # Run a sane, fast set on PRs; you can expand tool list for nightly
+          ${SB} -t slither,mythril,semgrep -f ${TARGETS} --timeout 600 --sarif || true
 
-          echo "=== Short listing of collected SARIF ==="
+          echo "=== Collect SARIF from results ==="
+          find results -type f -name "*.sarif" -print -exec cp {} ../sarif/ \; || true
+          echo "=== SARIF listing ==="
           ls -lh ../sarif || true
           for f in ../sarif/*.sarif; do
-            echo "---- $f ----"
-            head -n 25 "$f" || true
-          done
+            echo "---- $f ----"; head -n 25 "$f" || true; done
 
       - name: Upload SARIF to Code Scanning
         uses: github/codeql-action/upload-sarif@v3
         with:
-          # You can point to a directory; the action will ingest all SARIF files in it
           sarif_file: sarif
 
-      # Optional but super helpful for debugging / offline viewing
-      - name: Upload SmartBugs raw results (artifact)
+      - name: Upload raw SmartBugs results (artifact)
         uses: actions/upload-artifact@v4
         with:
           name: smartbugs-results
           path: |
             smartbugs/results
             sarif
+            sol_targets.txt
