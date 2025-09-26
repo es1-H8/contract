@@ -14,7 +14,6 @@ jobs:
 
     steps:
       - name: Checkout repo
-      # If the Solidity lives in submodules, add: with: submodules: recursive
         uses: actions/checkout@v4
 
       - name: Install base deps
@@ -22,6 +21,13 @@ jobs:
           set -euxo pipefail
           sudo apt-get update
           sudo apt-get install -y python3 python3-venv python3-pip jq tree
+
+      # Add right after "Install base deps"
+      - name: Check Docker
+        run: |
+          set -euxo pipefail
+          docker --version
+          docker info | sed -n '1,50p'
 
       # OPTIONAL: compile with Hardhat if present
       - name: Compile (Hardhat, if present)
@@ -52,7 +58,7 @@ jobs:
           fi
           (smartbugs --version || ./smartbugs --version || true) || true
 
-      # === Keep Detect Solidity files step as-is, but add a count ===
+      # (Keep Detect Solidity files step as-is, but add a count)
       - name: Detect Solidity files
         id: detect
         run: |
@@ -71,51 +77,34 @@ jobs:
           fi
           printf "%s\n" "$SOL_LIST" > sol_targets.txt
 
+      # Replace the old run step with this:
       - name: Run SmartBugs (Slither + Mythril + Semgrep)
         working-directory: smartbugs
         run: |
           set -euxo pipefail
           . .venv/bin/activate
-          mkdir -p ../sarif ../logs
+          mkdir -p ../sarif
 
           TARGETS=$(sed 's|^|../|' ../sol_targets.txt | tr '\n' ' ')
-          echo "TARGETS: ${TARGETS}"
+          echo "TARGET COUNT: $(wc -w <<<"$TARGETS")"
+          test -n "$TARGETS"
 
-          SB="smartbugs"; command -v smartbugs >/dev/null 2>&1 || SB="./smartbugs"
-
-          # Let SmartBugs run even if one tool fails
-          ${SB} -t slither,mythril,semgrep -f ${TARGETS} --timeout 600 --sarif || true
+          # Use the Python entrypoint to avoid path/entrypoint glitches
+          python -m smartbugs -t slither,mythril,semgrep -f ${TARGETS} --timeout 600 --sarif
 
           echo "=== Collect SARIF into ../sarif ==="
-          # Guard copy; don't fail if 'results' doesn't exist yet
-          if [ -d results ]; then
-            find results -type f -name '*.sarif' -print -exec cp {} ../sarif/ \; || true
-          else
-            echo "No results directory from SmartBugs."
-          fi
+          find results -type f -name '*.sarif' -print -exec cp {} ../sarif/ \;
 
+      # Make the dump step tolerant (do not fail if dirs are missing)
       - name: Dump SmartBugs results (logs + previews)
         run: |
           set -euxo pipefail
-          echo "=== RESULTS TREE ==="
-          tree -a -L 4 smartbugs/results || true
-
-          echo "=== Preview SARIF files ==="
-          mkdir -p sarif
-          if ls sarif/*.sarif >/dev/null 2>&1; then
-            ls -lh sarif || true
-            for f in sarif/*.sarif; do
-              echo "---- $f (head) ----"; head -n 40 "$f" || true
-              echo "---- $f (jq counts) ----"; jq '.runs[0].results | length' "$f" || true
-            done
-          else
-            echo "No SARIF files found."
-          fi
-
-          echo "=== Look for common error clues in tool logs ==="
-          GREP_PATTERNS='error|could not compile|solc|import.*not found|TypeError|ParserError|Timeout'
           if [ -d smartbugs/results ]; then
-            # Correct patterns: *.log / *.txt
+            echo "=== RESULTS TREE ==="
+            tree -a -L 4 smartbugs/results || true
+
+            echo "=== Look for common error clues in tool logs ==="
+            GREP_PATTERNS='error|could not compile|solc|import.*not found|TypeError|ParserError|Timeout'
             find smartbugs/results -type f \( -name '*.log' -o -name '*.txt' -o -name '*.json' \) -print | while read -r f; do
               if (grep -Eqi "$GREP_PATTERNS" "$f"); then
                 echo "---- POSSIBLE ISSUE IN: $f ----"
@@ -124,7 +113,18 @@ jobs:
               fi
             done
           else
-            echo "No results directory; skipping log scan."
+            echo "smartbugs/results does not exist (SmartBugs produced no outputs)."
+          fi
+
+          echo "=== Preview SARIF files ==="
+          if ls sarif/*.sarif >/dev/null 2>&1; then
+            ls -lh sarif
+            for f in sarif/*.sarif; do
+              echo "---- $f (head) ----"; head -n 40 "$f" || true
+              echo "---- $f (jq counts) ----"; jq '.runs[0].results | length' "$f" || true
+            done
+          else
+            echo "No SARIF files collected."
           fi
 
       - name: Upload SARIF to Code Scanning
