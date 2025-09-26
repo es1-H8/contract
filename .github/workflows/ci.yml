@@ -14,6 +14,7 @@ jobs:
 
     steps:
       - name: Checkout repo
+      # If the Solidity lives in submodules, add: with: submodules: recursive
         uses: actions/checkout@v4
 
       - name: Install base deps
@@ -51,6 +52,7 @@ jobs:
           fi
           (smartbugs --version || ./smartbugs --version || true) || true
 
+      # === Keep Detect Solidity files step as-is, but add a count ===
       - name: Detect Solidity files
         id: detect
         run: |
@@ -60,8 +62,10 @@ jobs:
           if [ -z "$SOL_LIST" ]; then
             SOL_LIST="$(find . -type f -name '*.sol' | sed 's|^\./||')"
           fi
+          COUNT=$(printf "%s\n" "$SOL_LIST" | sed '/^$/d' | wc -l)
+          echo "Found $COUNT Solidity files"
           echo "$SOL_LIST" | sed 's/^/ - /' || true
-          if [ -z "$SOL_LIST" ]; then
+          if [ "$COUNT" -eq 0 ]; then
             echo "::error::No Solidity files found. Check repo paths (contracts/ or src/)."
             exit 1
           fi
@@ -79,10 +83,16 @@ jobs:
 
           SB="smartbugs"; command -v smartbugs >/dev/null 2>&1 || SB="./smartbugs"
 
+          # Let SmartBugs run even if one tool fails
           ${SB} -t slither,mythril,semgrep -f ${TARGETS} --timeout 600 --sarif || true
 
           echo "=== Collect SARIF into ../sarif ==="
-          find results -type f -name '*.sarif' -print -exec cp {} ../sarif/ \; || true
+          # Guard copy; don't fail if 'results' doesn't exist yet
+          if [ -d results ]; then
+            find results -type f -name '*.sarif' -print -exec cp {} ../sarif/ \; || true
+          else
+            echo "No results directory from SmartBugs."
+          fi
 
       - name: Dump SmartBugs results (logs + previews)
         run: |
@@ -91,21 +101,31 @@ jobs:
           tree -a -L 4 smartbugs/results || true
 
           echo "=== Preview SARIF files ==="
-          ls -lh sarif || true
-          for f in sarif/*.sarif; do
-            echo "---- $f (head) ----"; head -n 40 "$f" || true
-            echo "---- $f (jq counts) ----"; jq '.runs[0].results | length' "$f" || true
-          done
+          mkdir -p sarif
+          if ls sarif/*.sarif >/dev/null 2>&1; then
+            ls -lh sarif || true
+            for f in sarif/*.sarif; do
+              echo "---- $f (head) ----"; head -n 40 "$f" || true
+              echo "---- $f (jq counts) ----"; jq '.runs[0].results | length' "$f" || true
+            done
+          else
+            echo "No SARIF files found."
+          fi
 
           echo "=== Look for common error clues in tool logs ==="
           GREP_PATTERNS='error|could not compile|solc|import.*not found|TypeError|ParserError|Timeout'
-          find smartbugs/results -type f \( -name '.log' -o -name '.txt' -o -name '*.json' \) -print | while read -r f; do
-            if (grep -Eqi "$GREP_PATTERNS" "$f"); then
-              echo "---- POSSIBLE ISSUE IN: $f ----"
-              sed -n '1,120p' "$f" || true
-              echo
-            fi
-          done
+          if [ -d smartbugs/results ]; then
+            # Correct patterns: *.log / *.txt
+            find smartbugs/results -type f \( -name '*.log' -o -name '*.txt' -o -name '*.json' \) -print | while read -r f; do
+              if (grep -Eqi "$GREP_PATTERNS" "$f"); then
+                echo "---- POSSIBLE ISSUE IN: $f ----"
+                sed -n '1,120p' "$f" || true
+                echo
+              fi
+            done
+          else
+            echo "No results directory; skipping log scan."
+          fi
 
       - name: Upload SARIF to Code Scanning
         uses: github/codeql-action/upload-sarif@v3
