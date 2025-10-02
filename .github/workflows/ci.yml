@@ -41,40 +41,22 @@ jobs:
             echo "No Hardhat found (skipping compile)."
           fi
 
-      - name: Fetch & prepare SmartBugs (create venv + deps + symlink)
+      # Fetch SmartBugs and set up venv that the CLI expects (./venv)
+      - name: Fetch SmartBugs and set up venv
         run: |
           set -euxo pipefail
           git clone --depth 1 https://github.com/smartbugs/smartbugs
           cd smartbugs
 
-          # Create our venv and install deps
-          python3 -m venv .venv
-          . .venv/bin/activate
-          python -m pip install --upgrade pip wheel
-          if [ -f pyproject.toml ]; then
-            pip install .
-          elif [ -f requirements.txt ]; then
-            pip install -r requirements.txt
-          fi
+          python3 -m venv venv
+          . venv/bin/activate
+          python3 -m pip install --upgrade pip wheel setuptools
 
-          # The script imports 'cpuinfo' (pip package 'py-cpuinfo')
-          pip install py-cpuinfo
+          # Try editable install; if that fails, install minimal deps
+          (python3 -m pip install -e .) || python3 -m pip install py-cpuinfo pyyaml tabulate docker psutil
 
-          # Some environments need these CLIs in case the wrapper runs them locally
-          # (SmartBugs primarily uses Docker images, but keep this harmless)
-          pip install slither-analyzer mythril semgrep || true
-
-          # The wrapper script expects ./venv/bin/activate – provide it via symlink
-          # so it points at our .venv. This fixes: .../smartbugs/venv/bin/activate: No such file or directory
-          [ -e venv ] || ln -s .venv venv
-
-          # Make sure CLI is executable
-          chmod +x smartbugs
-
-          # Quick sanity check
-          . .venv/bin/activate
-          python -c "import cpuinfo; print('cpuinfo OK')"
-          ./smartbugs --help >/dev/null || true
+          # sanity check (no heredoc to avoid YAML parsing issues)
+          python3 -c "import sys, pkgutil; print('python:', sys.version); print('cpuinfo OK?', bool(pkgutil.find_loader('cpuinfo')))"
 
       - name: Detect Solidity files
         id: detect
@@ -94,11 +76,13 @@ jobs:
           fi
           printf "%s\n" "$SOL_LIST" > sol_targets.txt
 
-      # Use the SmartBugs CLI script (Docker-based)
       - name: Run SmartBugs (Slither + Mythril + Semgrep)
         working-directory: smartbugs
         run: |
           set -euxo pipefail
+
+          # ensure CLI is executable
+          chmod +x smartbugs
 
           mkdir -p ../sarif
 
@@ -107,7 +91,7 @@ jobs:
           echo "TARGET COUNT: $(wc -w <<<"$TARGETS")"
           test -n "$TARGETS"
 
-          # Run the SmartBugs CLI (Docker-based)
+          # Run the SmartBugs CLI (it will source ./venv/bin/activate itself)
           ./smartbugs -t slither,mythril,semgrep -f ${TARGETS} --timeout 600 --sarif
 
           echo "=== Collect SARIF into ../sarif ==="
