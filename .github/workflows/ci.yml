@@ -1,4 +1,5 @@
 name: smartbugs
+
 on:
   pull_request:
   push:
@@ -77,20 +78,24 @@ jobs:
           fi
           printf "%s\n" "$SOL_LIST" > sol_targets.txt
 
-      # Replace the old run step with this:
+      # ✅ Use the SmartBugs CLI script instead of python -m
       - name: Run SmartBugs (Slither + Mythril + Semgrep)
         working-directory: smartbugs
         run: |
           set -euxo pipefail
-          . .venv/bin/activate
+
+          # Ensure the CLI script is executable
+          chmod +x smartbugs
+
           mkdir -p ../sarif
 
+          # Build explicit targets relative to smartbugs/
           TARGETS=$(sed 's|^|../|' ../sol_targets.txt | tr '\n' ' ')
           echo "TARGET COUNT: $(wc -w <<<"$TARGETS")"
           test -n "$TARGETS"
 
-          # Use the Python entrypoint to avoid path/entrypoint glitches
-          python -m smartbugs -t slither,mythril,semgrep -f ${TARGETS} --timeout 600 --sarif
+          # Run the SmartBugs CLI (Docker-based)
+          ./smartbugs -t slither,mythril,semgrep -f ${TARGETS} --timeout 600 --sarif
 
           echo "=== Collect SARIF into ../sarif ==="
           find results -type f -name '*.sarif' -print -exec cp {} ../sarif/ \;
